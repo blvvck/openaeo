@@ -1,0 +1,183 @@
+
+
+@layer base {
+  :root {
+    /* ===== BORDER RADIUS SCALE ===== */
+    --radius-none: 0;
+    --radius-sm: 0.25rem;         /* 4px - small elements: checkboxes */
+    --radius-md: 0.5rem;          /* 8px - standard: buttons, inputs, tooltips */
+    --radius-lg: 0.75rem;         /* 12px - cards, dropdowns */
+    --radius-xl: 1rem;            /* 16px - modals, dialogs */
+    --radius-2xl: 1.5rem;         /* 24px - large panels */
+    --radius-full: 9999px;        /* Pills, badges, avatars, progress bars */
+
+    /* Alias for shadcn compatibility */
+    --radius: 0.75rem;            /* Default = lg (12px) */
+
+    /* ===== BORDER WIDTHS ===== */
+    --border-width-none: 0;
+    --border-width-thin: 1px;
+    --border-width-default: 1px;
+    --border-width-thick: 2px;
+    --border-width-heavy: 4px;
+
+    /* ===== SHADOWS (Light Mode) ===== */
+    /* Use these in light mode; in dark mode, use borders instead */
+
+    /* Extra small - subtle lift */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+    /* Small - default card shadow */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1),
+                 0 1px 2px rgba(0, 0, 0, 0.06);
+
+    /* Medium - elevated cards, popovers */
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+    /* Large - dropdowns, tooltips, modals */
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+                 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+    /* Extra large - full-screen modals */
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+                 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* 2XL - dramatic elevation */
+    --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+    /* Inner shadow - for inputs, inset effects */
+    --shadow-inner: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+
+    /* Focus ring shadow */
+    --shadow-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+    --shadow-ring-error: 0 0 0 3px rgba(239, 68, 68, 0.5);
+    --shadow-ring-success: 0 0 0 3px rgba(34, 197, 94, 0.5);
+
+    /* No shadow */
+    --shadow-none: none;
+
+    /* ===== COMPONENT-TO-RADIUS MAPPING ===== */
+    /* Standard components */
+    --button-radius: var(--radius-md);        /* 8px */
+    --input-radius: var(--radius-md);         /* 8px */
+    --tooltip-radius: var(--radius-md);       /* 8px */
+    --popover-radius: var(--radius-md);       /* 8px */
+    --dropdown-radius: var(--radius-md);      /* 8px */
+
+    /* Large components */
+    --card-radius: var(--radius-lg);          /* 12px */
+    --stat-card-radius: var(--radius-lg);     /* 12px */
+    --table-radius: var(--radius-lg);         /* 12px */
+    --chart-radius: var(--radius-lg);         /* 12px */
+
+    /* XL components */
+    --modal-radius: var(--radius-xl);         /* 16px */
+    --dialog-radius: var(--radius-xl);        /* 16px */
+    --drawer-radius: var(--radius-xl);        /* 16px (top corners only) */
+
+    /* Pill components */
+    --badge-radius: var(--radius-full);       /* 9999px */
+    --avatar-radius: var(--radius-full);      /* 9999px */
+    --progress-radius: var(--radius-full);    /* 9999px */
+    --toggle-radius: var(--radius-full);      /* 9999px */
+
+    /* Small components */
+    --checkbox-radius: var(--radius-sm);      /* 4px */
+
+    /* Edge components */
+    --sidebar-radius: var(--radius-none);     /* 0 (edge-to-edge) */
+
+    /* ===== COMPONENT-TO-SHADOW MAPPING (Light Mode) ===== */
+    --button-shadow: var(--shadow-none);
+    --input-shadow: var(--shadow-none);
+    --input-focus-shadow: var(--shadow-ring);
+    --card-shadow: var(--shadow-sm);
+    --card-hover-shadow: var(--shadow-md);
+    --dropdown-shadow: var(--shadow-lg);
+    --tooltip-shadow: var(--shadow-lg);
+    --popover-shadow: var(--shadow-lg);
+    --modal-shadow: var(--shadow-xl);
+    --toast-shadow: var(--shadow-lg);
+  }
+
+  /* ===== DARK MODE SHADOW STRATEGY ===== */
+  /*
+   * In dark mode, shadows are less visible against dark backgrounds.
+   * Instead, we rely on:
+   * 1. Border colors to define edges
+   * 2. Background elevation (elevated surfaces are lighter)
+   * 3. Subtle inner glows for emphasis
+   */
+  .dark {
+    /* Reduced shadows in dark mode */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.5);
+    --shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.6);
+
+    /* Dark mode uses more visible focus rings */
+    --shadow-ring: 0 0 0 3px rgba(59, 130, 246, 0.6);
+    --shadow-ring-error: 0 0 0 3px rgba(239, 68, 68, 0.6);
+    --shadow-ring-success: 0 0 0 3px rgba(34, 197, 94, 0.6);
+
+    /* Cards use borders, not shadows in dark mode */
+    --card-shadow: var(--shadow-none);
+    --card-hover-shadow: var(--shadow-none);
+  }
+}
+
+@layer utilities {
+  /* ===== RADIUS UTILITIES ===== */
+  .rounded-none { border-radius: var(--radius-none); }
+  .rounded-sm { border-radius: var(--radius-sm); }
+  .rounded-md { border-radius: var(--radius-md); }
+  .rounded-lg { border-radius: var(--radius-lg); }
+  .rounded-xl { border-radius: var(--radius-xl); }
+  .rounded-2xl { border-radius: var(--radius-2xl); }
+  .rounded-full { border-radius: var(--radius-full); }
+
+  /* Component-specific radius utilities */
+  .rounded-card { border-radius: var(--card-radius); }
+  .rounded-button { border-radius: var(--button-radius); }
+  .rounded-input { border-radius: var(--input-radius); }
+  .rounded-modal { border-radius: var(--modal-radius); }
+  .rounded-badge { border-radius: var(--badge-radius); }
+
+  /* ===== SHADOW UTILITIES ===== */
+  .shadow-none { box-shadow: var(--shadow-none); }
+  .shadow-xs { box-shadow: var(--shadow-xs); }
+  .shadow-sm { box-shadow: var(--shadow-sm); }
+  .shadow-md { box-shadow: var(--shadow-md); }
+  .shadow-lg { box-shadow: var(--shadow-lg); }
+  .shadow-xl { box-shadow: var(--shadow-xl); }
+  .shadow-2xl { box-shadow: var(--shadow-2xl); }
+  .shadow-inner { box-shadow: var(--shadow-inner); }
+
+  /* Focus ring utilities */
+  .ring-focus { box-shadow: var(--shadow-ring); }
+  .ring-error { box-shadow: var(--shadow-ring-error); }
+  .ring-success { box-shadow: var(--shadow-ring-success); }
+
+  /* ===== NESTED RADIUS HELPERS ===== */
+  /*
+   * Use these when nesting elements inside rounded containers.
+   * The inner-* classes account for the parent's border/padding.
+   */
+
+  /* Inner element flush to parent's edge */
+  .inner-rounded-lg {
+    border-radius: calc(var(--radius-lg) - 1px);
+  }
+
+  /* Footer inside a card (bottom corners only) */
+  .rounded-b-card {
+    border-radius: 0 0 var(--card-radius) var(--card-radius);
+  }
+
+  /* Inner rounded bottom (slightly smaller) */
+  .inner-rounded-b-lg {
+    border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+  }
+}

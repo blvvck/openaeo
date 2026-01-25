@@ -1,0 +1,116 @@
+import { clerkClient, getAuth } from "@clerk/express";
+import type { NextFunction, Request, Response } from "express";
+import { createHash } from "node:crypto";
+import { prisma, prismaRoot } from "../prisma";
+import { runInWorkspaceTransaction } from "../context/workspace-context";
+
+const LEGACY_OWNER_ID = "openaeo-legacy-owner";
+const LEGACY_WORKSPACE_SLUG = "openaeo-legacy";
+
+async function getOrCreateWorkspace(userId: string) {
+  const clerkUser = await clerkClient.users.getUser(userId);
+  const primaryEmail = clerkUser.emailAddresses.find(
+    (email) => email.id === clerkUser.primaryEmailAddressId,
+  )?.emailAddress;
+
+  if (!primaryEmail) throw new Error("Authenticated Clerk user has no primary email address");
+
+  const displayName = [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || null;
+  await prisma.users.upsert({
+    where: { id: userId },
+    create: { id: userId, email: primaryEmail, display_name: displayName, avatar_url: clerkUser.imageUrl },
+    update: { email: primaryEmail, display_name: displayName, avatar_url: clerkUser.imageUrl, updated_at: new Date() },
+  });
+
+  const findMemberships = () => prisma.workspace_members.findMany({
+    where: { user_id: userId, workspaces: { deleted_at: null } },
+    include: { workspaces: true },
+  });
+
+  const memberships = await findMemberships();
+  const legacyWorkspace = await prisma.workspaces.findFirst({
+    where: { slug: LEGACY_WORKSPACE_SLUG, owner_id: LEGACY_OWNER_ID, deleted_at: null },
+  });
+
+  if (legacyWorkspace) {
+    const claimed = await prisma.workspaces.updateMany({
+      where: { id: legacyWorkspace.id, owner_id: LEGACY_OWNER_ID },
+      data: { owner_id: userId, name: "OpenAEO Workspace", updated_at: new Date() },
+    });
+
+    if (claimed.count) {
+      await prisma.workspace_members.updateMany({
+        where: { workspace_id: legacyWorkspace.id, user_id: LEGACY_OWNER_ID },
+        data: { user_id: userId },
+      });
+      const claimedWorkspace = await prisma.workspaces.findUniqueOrThrow({ where: { id: legacyWorkspace.id } });
+      return [claimedWorkspace, ...memberships.map(({ workspaces }) => workspaces).filter(({ id }) => id !== claimedWorkspace.id)];
+    }
+  }
+
+  if (memberships.length) return memberships.map(({ workspaces }) => workspaces);
+
+  const concurrentMemberships = await findMemberships();
+  if (concurrentMemberships.length) return concurrentMemberships.map(({ workspaces }) => workspaces);
+
+  const slug = `ws-${createHash("sha256").update(userId).digest("hex").slice(0, 20)}`;
+  const workspace = await prisma.workspaces.upsert({
+    where: { slug },
+    create: { name: `${clerkUser.firstName || "My"} Workspace`, slug, owner_id: userId, plan: "free" },
+    update: {},
+  });
+
+  await prisma.workspace_members.upsert({
+    where: { workspace_id_user_id: { workspace_id: workspace.id, user_id: userId } },
+    create: { workspace_id: workspace.id, user_id: userId, role: "owner" },
+    update: {},
+  });
+
+  return [workspace];
+}
+
+export async function workspaceContextMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (req.path === "/test" || req.path.startsWith("/webhooks/cdn") || req.path.startsWith("/export/public/")) {
+    next();
+    return;
+  }
+
+  const { userId } = getAuth(req);
+  if (!userId) {
+    res.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+    return;
+  }
+
+  try {
+    const workspaces = await getOrCreateWorkspace(userId);
+    const requestedWorkspaceId = req.header("x-workspace-id");
+    const workspace = requestedWorkspaceId
+      ? workspaces.find((candidate) => candidate.id === requestedWorkspaceId)
+      : workspaces[0];
+
+    if (!workspace) {
+      res.status(403).json({ error: "Workspace access denied", code: "WORKSPACE_ACCESS_DENIED" });
+      return;
+    }
+
+    res.setHeader("X-Workspace-Id", workspace.id);
+    await runInWorkspaceTransaction(prismaRoot, workspace.id, () => new Promise<void>((resolve, reject) => {
+      res.once("finish", resolve);
+      res.once("close", resolve);
+      try {
+        next();
+      } catch (error) {
+        reject(error);
+      }
+    }));
+  } catch (error) {
+    console.error("[Workspace] Context resolution failed:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Workspace context unavailable", code: "WORKSPACE_CONTEXT_ERROR" });
+    }
+  }
+}

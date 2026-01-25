@@ -1,0 +1,13 @@
+node_modules
+build
+dist/
+npm-debug.log
+.env
+.env.local
+.env*.local
+.DS_Store
+.claude.json
+.claude/
+.agent/
+/migrations/
+/competitor-screenshots/

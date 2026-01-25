@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>OpenAEO</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Inter Font - Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Inter with variable weights: 400 (regular), 500 (medium), 600 (semibold), 700 (bold) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Theme color for mobile browsers -->
+    <meta name="theme-color" content="#FFFFFF" />
+
+    <!-- Theme detection - runs before paint to prevent FOUC -->
+    <script>
+      (function() {
+        // Check cookie first (for SSR compatibility), then localStorage
+        const cookieTheme = document.cookie
+          .split('; ')
+          .find(function(row) { return row.startsWith('theme='); });
+        const theme = cookieTheme
+          ? cookieTheme.split('=')[1]
+          : localStorage.getItem('theme') || 'light';
+
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const resolved = theme === 'system'
+          ? (prefersDark ? 'dark' : 'light')
+          : theme;
+
+        // Apply theme class and data attribute immediately
+        document.documentElement.classList.add(resolved);
+        document.documentElement.setAttribute('data-theme', resolved);
+
+        // Update theme-color meta tag
+        var metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (metaThemeColor) {
+          metaThemeColor.setAttribute('content', resolved === 'dark' ? '#0A0A0A' : '#FFFFFF');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
