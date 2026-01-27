@@ -46,17 +46,17 @@ export function CompetitorLeaderboard({
     <div className={cn("w-full h-full flex flex-col", className)}>
       {/* Table Header — Figma: all headers #6B7380 (secondary) */}
       <div className="grid grid-cols-[40px_1fr_150px_48px] gap-2 px-5 py-3 border-b border-figma-border-light">
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          RANK
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Rank
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          BRAND
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Brand
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          TOP PLATFORMS
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Top platforms
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
-          SCORE
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
+          Score
         </span>
       </div>
 
@@ -127,10 +127,10 @@ export function CompetitorLeaderboardSkeleton() {
         <div className="w-full h-full flex flex-col">
             {/* Table Header */}
             <div className="grid grid-cols-[40px_1fr_150px_48px] gap-2 px-5 py-3 border-b border-figma-border-light">
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">RANK</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">BRAND</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">TOP PLATFORMS</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">SCORE</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">Rank</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">Brand</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">Top platforms</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">Score</span>
             </div>
 
             {/* Skeleton Rows */}

@@ -12,6 +12,15 @@ import { calculateVisibilityScore } from '../services/analytics/visibility-calcu
 import { compareCompetitors } from '../services/analytics/competitor-detector';
 import { analyzeCitations } from '../services/analytics/citation-tracker';
 import type { TimeRangePreset, CompetitorMetricsResponse } from '@shared/types';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { prismaRoot } from '../prisma';
+
+async function workspaceNameFallback(): Promise<string> {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) return 'Your organization';
+  const workspace = await prismaRoot.workspaces.findUnique({ where: { id: workspaceId }, select: { name: true } });
+  return workspace?.name ?? 'Your organization';
+}
 
 const router = Router();
 
@@ -1134,7 +1143,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
     // Determine if we have real tracked data (prompts exist AND responses collected)
     const hasTrackedData = promptCount > 0 && currentResponses.length > 0;
 
-    const brandName = activeBrandConfig?.name || 'Acme';
+    const brandName = activeBrandConfig?.name || await workspaceNameFallback();
     const competitorNames = competitors.map(c => c.name);
 
     // Calculate visibility for current and previous periods
@@ -1586,7 +1595,7 @@ router.get('/', async (req: Request, res: Response) => {
       getActiveBrandConfig(),
     ]);
 
-    const brandName = activeBrandConfig?.name || 'Acme';
+    const brandName = activeBrandConfig?.name || await workspaceNameFallback();
     const competitorNames = competitors.map(c => c.name);
 
     // Calculate visibility scores
@@ -1838,7 +1847,7 @@ router.get('/by-platform', async (req: Request, res: Response) => {
       getActiveBrandConfig(),
     ]);
 
-    const brandName = activeBrandConfig?.name || 'Acme';
+    const brandName = activeBrandConfig?.name || await workspaceNameFallback();
     const allEntities = [brandName, ...competitors.map(c => c.name)];
 
     // Build platform rankings
@@ -1956,7 +1965,7 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
       getActiveBrandConfig(),
     ]);
 
-    const brandName = activeBrandConfig?.name || 'Acme';
+    const brandName = activeBrandConfig?.name || await workspaceNameFallback();
 
     // Find the competitor
     const competitor = competitors.find(c =>
@@ -2201,7 +2210,12 @@ const TIME_RANGE_DAYS: Record<string, number> = {
 router.get('/trends', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '30d';
-    const days = TIME_RANGE_DAYS[timeRange] || 30;
+    const requestedDays = TIME_RANGE_DAYS[timeRange] || 30;
+    const toDate = new Date();
+    const fromDate = timeRange === 'all'
+      ? new Date(2020, 0, 1)
+      : new Date(toDate.getTime() - requestedDays * 24 * 60 * 60 * 1000);
+    const days = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
 
     // Determine interval based on time range
     const interval: 'day' | 'week' | 'month' =
@@ -2210,18 +2224,19 @@ router.get('/trends', async (req: Request, res: Response) => {
     // Get brand config
     const brandConfig = await getActiveBrandConfig();
 
-    const brandName = brandConfig?.name || 'Acme';
+    const brandName = brandConfig?.name || await workspaceNameFallback();
 
     // Get competitors from DB
     const dbCompetitors = await storage.getCompetitors();
     const competitorNames = dbCompetitors.map(c => c.name);
 
     // Calculate date range
-    const toDate = new Date();
-    const fromDate = new Date(toDate.getTime() - days * 24 * 60 * 60 * 1000);
-
     // Get all responses in time range
     const responses = await storage.getResponsesInTimeRange(fromDate, toDate);
+    const workspaceId = currentWorkspaceId();
+    const historicalResponseCount = workspaceId
+      ? await prismaRoot.responses.count({ where: { workspace_id: workspaceId } })
+      : 0;
 
     // Group responses by date bucket
     const getDateKey = (date: Date): string => {
@@ -2341,6 +2356,8 @@ router.get('/trends', async (req: Request, res: Response) => {
       competitors: competitorsForChart,
       timeRange,
       interval,
+      hasHistoricalData: historicalResponseCount > 0,
+      hasDataInRange: responses.length > 0,
     });
   } catch (error) {
     console.error('[Competitors API] Error fetching trends:', error);

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PlatformIcon } from '@/components/ui/platform-icon';
 import { useToast } from '@/hooks/use-toast';
-import { DEMO_CONFIG } from '@/config/app';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
 
 import { PlatformPerformanceCard } from './platform-performance-card';
 import { PromptAnalysisCard } from './prompt-analysis-card';
@@ -142,7 +142,7 @@ function MetricCard({
 
         {/* Center label */}
         <div className="flex justify-center pt-1">
-          <span className="text-figma-2xs font-medium text-figma-muted uppercase tracking-wider px-4 py-2 bg-figma-hover rounded-full">
+          <span className="text-figma-2xs font-medium text-figma-muted tracking-wider px-4 py-2 bg-figma-hover rounded-full">
             {label}
           </span>
         </div>
@@ -210,7 +210,7 @@ function MetricCard({
 
       {/* Center label */}
       <div className="flex justify-center pt-1">
-        <span className="text-figma-2xs font-medium text-figma-muted uppercase tracking-wider px-4 py-2 bg-figma-hover rounded-full">
+        <span className="text-figma-2xs font-medium text-figma-muted tracking-wider px-4 py-2 bg-figma-hover rounded-full">
           {label}
         </span>
       </div>
@@ -245,9 +245,11 @@ export function ResultsPage({
   results,
   onResearchAnother,
   onAddAsCompetitor,
-  userBrandName = DEMO_CONFIG.brandName,
+  userBrandName,
   userBrandLogo,
 }: ResultsPageProps) {
+  const organizationName = useActiveWorkspaceName();
+  const resolvedBrandName = userBrandName ?? organizationName;
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -339,7 +341,7 @@ export function ResultsPage({
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="text-figma-sm font-semibold text-figma-blue">
-                {userBrandName}
+                {resolvedBrandName}
               </div>
               <div className="text-figma-2xs text-figma-muted">You</div>
             </div>
@@ -355,7 +357,7 @@ export function ResultsPage({
                 />
               ) : (
                 <span className="text-figma-sm font-bold text-figma-blue">
-                  {userBrandName.substring(0, 2).toUpperCase()}
+                  {resolvedBrandName.substring(0, 2).toUpperCase()}
                 </span>
               )}
             </div>
@@ -411,7 +413,7 @@ export function ResultsPage({
         <PlatformPerformanceCard
           platforms={results.platforms}
           targetName={results.brand.name}
-          yourName={userBrandName}
+          yourName={resolvedBrandName}
           className="border-0 shadow-none"
         />
 
@@ -422,7 +424,7 @@ export function ResultsPage({
             yourPromptResults={results.yourPromptResults}
             targetName={results.brand.name}
             targetLogo={results.brand.logo}
-            yourName={userBrandName}
+            yourName={resolvedBrandName}
             yourLogo={userBrandLogo}
             className="h-full border-0 shadow-none"
           />
@@ -431,7 +433,7 @@ export function ResultsPage({
             yourInsights={results.yourInsights}
             targetName={results.brand.name}
             targetLogo={results.brand.logo}
-            yourName={userBrandName}
+            yourName={resolvedBrandName}
             yourLogo={userBrandLogo}
             className="h-full border-0 shadow-none"
           />

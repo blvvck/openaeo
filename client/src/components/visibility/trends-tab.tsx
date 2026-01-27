@@ -628,19 +628,19 @@ function MetricTrendsTable({
     >
       {/* Table header */}
       <div className="grid grid-cols-[1fr_80px_80px_80px_60px] gap-3 pb-3 px-2 border-b border-figma-border-light">
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
+        <span className="text-figma-2xs font-medium text-figma-secondary">
           Metric
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
           Current
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
           Previous
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
           Change
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
           Trend
         </span>
       </div>
@@ -782,19 +782,19 @@ function TrendsLoading() {
       >
         {/* Header */}
         <div className="grid grid-cols-[1fr_80px_80px_80px_60px] gap-3 pb-3 px-2 border-b border-figma-border-light">
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
+          <span className="text-figma-2xs font-medium text-figma-secondary">
             Metric
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Current
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Previous
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Change
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Trend
           </span>
         </div>
@@ -872,19 +872,19 @@ function TrendsEmpty({ brandName }: { brandName: string }) {
       >
         {/* Header visible */}
         <div className="grid grid-cols-[1fr_80px_80px_80px_60px] gap-3 pb-3 px-2 border-b border-figma-border-light">
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
+          <span className="text-figma-2xs font-medium text-figma-secondary">
             Metric
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Current
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Previous
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Change
           </span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">
             Trend
           </span>
         </div>

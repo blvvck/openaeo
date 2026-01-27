@@ -55,18 +55,18 @@ export function EmptyState({
       >
         {/* Icon - no background, very faded */}
         {Icon && (
-          <Icon className="w-8 h-8 text-gray-300 dark:text-gray-600" aria-hidden="true" />
+          <Icon className="h-7 w-7 text-figma-muted" aria-hidden="true" />
         )}
 
         {/* Custom Illustration */}
         {illustration && <div className="mt-3">{illustration}</div>}
 
         {/* Title - subtle */}
-        <p className="text-sm font-medium text-gray-400 dark:text-gray-500 mt-3">{title}</p>
+        <p className="mt-3 text-figma-sm font-medium text-figma-secondary">{title}</p>
 
         {/* Description - very subtle, constrained */}
         {description && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5 max-w-[220px] line-clamp-2">
+          <p className="mt-1.5 max-w-[220px] text-figma-xs text-figma-muted line-clamp-2">
             {description}
           </p>
         )}
@@ -100,18 +100,18 @@ export function EmptyState({
     >
       {/* Icon - muted, no background */}
       {Icon && (
-        <Icon className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" aria-hidden="true" />
+        <Icon className="h-8 w-8 text-figma-muted mb-3" aria-hidden="true" />
       )}
 
       {/* Custom Illustration */}
       {illustration && <div className="mb-4">{illustration}</div>}
 
       {/* Title - muted */}
-      <h3 className="text-xl font-medium text-gray-400 dark:text-gray-500 mb-2">{title}</h3>
+      <h3 className="text-xl font-medium text-figma-primary mb-2">{title}</h3>
 
       {/* Description - subtle */}
       {description && (
-        <p className="text-sm text-gray-400 dark:text-gray-500 max-w-md mb-6">{description}</p>
+        <p className="text-figma-sm text-figma-secondary max-w-md mb-6">{description}</p>
       )}
 
       {/* Actions */}
@@ -172,6 +172,49 @@ export function ErrorState({
         <Button onClick={onRetry}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Try again
+        </Button>
+      )}
+    </div>
+  );
+}
+
+interface CardEmptyStateAction {
+  label: string;
+  onClick: () => void;
+}
+
+interface CardEmptyStateProps {
+  icon?: LucideIcon;
+  title: string;
+  description?: string;
+  action?: CardEmptyStateAction;
+  className?: string;
+}
+
+export function CardEmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className,
+}: CardEmptyStateProps) {
+  return (
+    <div
+      className={cn('flex flex-col items-center justify-center py-12 px-4 text-center', className)}
+    >
+      {Icon && <Icon className="h-7 w-7 text-figma-muted" aria-hidden="true" />}
+      <p className="mt-3 text-figma-sm font-medium text-figma-primary">{title}</p>
+      {description && (
+        <p className="mt-1 text-figma-xs text-figma-secondary">{description}</p>
+      )}
+      {action && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={action.onClick}
+          className="mt-3 text-figma-blue"
+        >
+          {action.label}
         </Button>
       )}
     </div>

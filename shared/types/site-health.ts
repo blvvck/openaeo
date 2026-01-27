@@ -29,17 +29,31 @@ export interface SiteHealthSummary {
 // =============================================================================
 
 /** Individual health check result */
+export interface SiteHealthCopyFeedback {
+  title: string;
+  description: string;
+}
+
+export type SiteHealthAction =
+  | {
+      label: string;
+      type: 'link';
+      value: string;
+    }
+  | {
+      label: string;
+      type: 'copy';
+      value: string;
+      copyFeedback: SiteHealthCopyFeedback;
+    };
+
 export interface HealthCheck {
   id: string;
   name: string;
   category: 'llms' | 'robots' | 'sitemap' | 'schema' | 'performance' | 'other';
   status: CheckStatus;
   details: string;
-  action?: {
-    label: string;
-    type: 'link' | 'modal' | 'copy';
-    value: string;
-  };
+  action?: SiteHealthAction;
 }
 
 /** Recommendation for improving site health */
@@ -49,11 +63,7 @@ export interface Recommendation {
   title: string;
   description: string;
   impact: 'high' | 'medium' | 'low';
-  actions: {
-    label: string;
-    type: 'link' | 'modal' | 'copy';
-    value: string;
-  }[];
+  actions: SiteHealthAction[];
 }
 
 // =============================================================================

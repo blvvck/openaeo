@@ -21,6 +21,8 @@ export interface TimeRange {
 interface TimeRangeSelectorProps {
   value?: TimeRange;
   onChange: (range: TimeRange) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   className?: string;
   variant?: 'dropdown' | 'buttons';
   presets?: TimeRangePreset[];
@@ -72,7 +74,10 @@ const PRESET_SHORT_LABELS: Record<TimeRangePreset, string> = {
 
 function getPresetRange(preset: TimeRangePreset): { from: Date; to: Date } {
   const to = new Date();
+  to.setHours(23, 59, 59, 999);
+
   const from = new Date();
+  from.setHours(0, 0, 0, 0);
 
   switch (preset) {
     case '1d':
@@ -122,6 +127,8 @@ function formatDateForDisplay(date: Date): string {
 export function TimeRangeSelector({
   value,
   onChange,
+  open,
+  onOpenChange,
   className,
   variant = 'dropdown',
   presets = ['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom'],
@@ -131,6 +138,12 @@ export function TimeRangeSelector({
   );
   const [customOpen, setCustomOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const isOpen = open ?? customOpen;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (open === undefined) setCustomOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
 
   const currentValue = value || internalValue;
 
@@ -143,7 +156,7 @@ export function TimeRangeSelector({
   const handlePresetChange = (preset: TimeRangePreset) => {
     if (preset === 'custom') {
       setDateRange({ from: currentValue.from, to: currentValue.to });
-      setCustomOpen(true);
+      handleOpenChange(true);
       return;
     }
 
@@ -164,7 +177,7 @@ export function TimeRangeSelector({
       const newRange: TimeRange = { from: dateRange.from, to, preset: 'custom' };
       setInternalValue(newRange);
       onChange(newRange);
-      setCustomOpen(false);
+      handleOpenChange(false);
     }
   };
 
@@ -195,12 +208,13 @@ export function TimeRangeSelector({
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <Popover open={customOpen} onOpenChange={setCustomOpen}>
+      <Popover open={isOpen} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
+            size="sm"
             className={cn(
-              'w-auto min-w-fit justify-start bg-figma-card border-figma-border shadow-sm hover:shadow-md hover:bg-figma-hover px-3 py-1.5 h-9 rounded-lg transition-all',
+              'w-auto min-w-fit justify-start bg-figma-card border-figma-border shadow-sm hover:shadow-md hover:bg-figma-hover px-3 py-1.5 rounded-lg transition-all',
               !currentValue && 'text-muted-foreground'
             )}
           >
@@ -222,7 +236,7 @@ export function TimeRangeSelector({
                   )}
                   onClick={() => {
                     handlePresetChange(preset);
-                    setCustomOpen(false);
+                    handleOpenChange(false);
                   }}
                 >
                   {PRESET_LABELS[preset]}
@@ -235,12 +249,12 @@ export function TimeRangeSelector({
                     ? 'bg-accent text-accent-foreground font-medium'
                     : 'hover:bg-accent/50 text-muted-foreground hover:text-foreground'
                 )}
-                onClick={() => setCustomOpen(true)}
+                onClick={() => handleOpenChange(true)}
               >
                 Custom
               </button>
             </div>
-            {currentValue.preset === 'custom' || customOpen ? (
+            {currentValue.preset === 'custom' || isOpen ? (
               <div className="p-3">
                 <Calendar
                   mode="range"
@@ -255,7 +269,7 @@ export function TimeRangeSelector({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCustomOpen(false)}
+                    onClick={() => handleOpenChange(false)}
                   >
                     Cancel
                   </Button>

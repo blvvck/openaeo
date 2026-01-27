@@ -18,7 +18,7 @@
  * - Row 2: Citations Table with filters
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearch, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,9 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { FilterBar, FilterSelect, FilterSearch } from '@/components/shared/filter-bar';
+import { CardEmptyState } from '@/components/shared/empty-state';
+import { MetricStatCard } from '@/components/shared/stat-metric';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tab-set';
 import {
   DropdownMenu,
@@ -144,53 +147,6 @@ function CitationTypeBadge({ type }: { type: CitationType }) {
 /**
  * Metric Card Component
  */
-function MetricCard({
-  label,
-  value,
-  subtitle,
-  trend,
-  onClick,
-}: {
-  label: string;
-  value: string | number;
-  subtitle?: string;
-  trend?: number;
-  onClick?: () => void;
-}) {
-  return (
-    <Card
-      className={cn(
-        'border-figma-border rounded-xl bg-white h-[140px]',
-        onClick && 'cursor-pointer hover:shadow-md transition-shadow'
-      )}
-      onClick={onClick}
-    >
-      <CardContent className="p-5 h-full flex flex-col">
-        <span className="text-figma-xs text-figma-secondary">{label}</span>
-        <div className="flex items-baseline gap-2 mt-1">
-          <span className="text-figma-md font-bold text-figma-primary tabular-nums">
-            {value}
-          </span>
-          {trend !== undefined && trend !== 0 && (
-            <span
-              className={cn(
-                'text-figma-xs font-medium',
-                trend > 0 ? 'text-figma-trend-up' : 'text-figma-trend-down'
-              )}
-            >
-              {trend > 0 ? '+' : ''}
-              {trend}%
-            </span>
-          )}
-        </div>
-        {subtitle && (
-          <span className="text-figma-xs text-figma-muted mt-1">{subtitle}</span>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 /**
  * Metric Cards Row - Changes based on active tab
  */
@@ -206,14 +162,14 @@ function MetricCardsRow({
   if (activeTab === 'all') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
+        <MetricStatCard
           label="Total citations"
           value={overview?.total.count ?? 0}
           trend={overview?.total.trend}
           subtitle="across all sources"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Owned citations"
           value={`${overview?.byType.owned.count ?? 0} (${overview?.byType.owned.percentage ?? 0}%)`}
           trend={overview?.byType.owned.trend}
@@ -221,7 +177,7 @@ function MetricCardsRow({
           onClick={() => onTabChange('owned')}
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Third-party"
           value={`${overview?.byType.thirdParty.count ?? 0} (${overview?.byType.thirdParty.percentage ?? 0}%)`}
           trend={overview?.byType.thirdParty.trend}
@@ -229,7 +185,7 @@ function MetricCardsRow({
           onClick={() => onTabChange('third-party')}
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Social citations"
           value={`${overview?.byType.social.count ?? 0} (${overview?.byType.social.percentage ?? 0}%)`}
           trend={overview?.byType.social.trend}
@@ -244,27 +200,27 @@ function MetricCardsRow({
   if (activeTab === 'owned') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
+        <MetricStatCard
           label="Owned citations"
           value={overview?.byType.owned.count ?? 0}
           trend={overview?.byType.owned.trend}
           subtitle="your domain pages"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Top page"
           value="/pricing"
           subtitle="most cited page"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Pages cited"
           value={12}
           trend={2}
           subtitle="unique pages"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Avg per page"
           value="10.6"
           trend={1}
@@ -278,27 +234,27 @@ function MetricCardsRow({
   if (activeTab === 'third-party') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard
+        <MetricStatCard
           label="Third-party citations"
           value={overview?.byType.thirdParty.count ?? 0}
           trend={overview?.byType.thirdParty.trend}
           subtitle="review sites, news"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Top source"
           value={overview?.topSource.domain ?? 'g2.com'}
           subtitle={`${overview?.topSource.count ?? 47} citations`}
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Unique sources"
           value={24}
           trend={4}
           subtitle="domains citing you"
 
         />
-        <MetricCard
+        <MetricStatCard
           label="Review sites"
           value="68%"
           subtitle="of third-party"
@@ -311,27 +267,27 @@ function MetricCardsRow({
   // Social tab
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <MetricCard
+      <MetricStatCard
         label="Social citations"
         value={overview?.byType.social.count ?? 0}
         trend={overview?.byType.social.trend}
         subtitle="communities, forums"
 
       />
-      <MetricCard
+      <MetricStatCard
         label="Top platform"
         value="reddit.com"
         subtitle="31 citations"
 
       />
-      <MetricCard
+      <MetricStatCard
         label="Unique threads"
         value={18}
         trend={3}
         subtitle="discussions citing you"
 
       />
-      <MetricCard
+      <MetricStatCard
         label="Sentiment"
         value="Mixed"
         subtitle="overall social tone"
@@ -386,100 +342,61 @@ function CitationsTable({
       title={title}
       subtitle={`${total} citations found`}
       headerRight={
-        <div className="flex items-center gap-3">
-          {/* Platform Filter */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="text-figma-sm">
-                {selectedPlatform
-                  ? PLATFORMS.find((p) => p.id === selectedPlatform)?.name
-                  : 'All platforms'}
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onPlatformChange(null)}>
-                All platforms
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {PLATFORMS.map((platform) => (
-                <DropdownMenuItem
-                  key={platform.id}
-                  onClick={() => onPlatformChange(platform.id)}
-                >
-                  <PlatformIcon platform={platform.id} size="xs" className="mr-2" />
-                  {platform.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Sentiment Filter */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="text-figma-sm">
-                {selectedSentiment
-                  ? SENTIMENT_OPTIONS.find((s) => s.value === selectedSentiment)?.label
-                  : 'All sentiments'}
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {SENTIMENT_OPTIONS.map((option) => (
-                <DropdownMenuItem
-                  key={option.value ?? 'all'}
-                  onClick={() => onSentimentChange(option.value)}
-                >
-                  {option.value && (
-                    <span
-                      className={cn(
-                        'w-2 h-2 rounded-full mr-2',
-                        option.value === 'positive' && 'bg-figma-green',
-                        option.value === 'neutral' && 'bg-amber-400',
-                        option.value === 'negative' && 'bg-figma-red',
-                        option.value === 'mixed' && 'bg-figma-muted'
-                      )}
-                    />
+        <FilterBar>
+          <FilterSearch
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder="Search sources..."
+            className="w-[200px]"
+          />
+          <FilterSelect
+            value={selectedPlatform ?? 'all'}
+            onValueChange={(v) => onPlatformChange(v === 'all' ? null : v)}
+            options={[
+              { value: 'all', label: 'All platforms' },
+              ...PLATFORMS.map((platform) => ({
+                value: platform.id,
+                label: platform.name,
+                icon: <PlatformIcon platform={platform.id} size="xs" />,
+              })),
+            ]}
+          />
+          <FilterSelect
+            value={selectedSentiment ?? 'all'}
+            onValueChange={(v) => onSentimentChange(v === 'all' ? null : (v as CitationSentiment))}
+            options={SENTIMENT_OPTIONS.map((option) => ({
+              value: option.value ?? 'all',
+              label: option.label,
+              icon: option.value ? (
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    option.value === 'positive' && 'bg-figma-green',
+                    option.value === 'neutral' && 'bg-amber-400',
+                    option.value === 'negative' && 'bg-figma-red',
+                    option.value === 'mixed' && 'bg-figma-muted'
                   )}
-                  {option.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-figma-muted" />
-            <Input
-              placeholder="Search sources..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-9 w-[200px] text-figma-sm"
-            />
-          </div>
-        </div>
+                />
+              ) : undefined,
+            }))}
+          />
+        </FilterBar>
       }
     >
       {citations.length === 0 ? (
-        <div className="py-12 text-center">
-          <Search className="w-10 h-10 text-figma-muted mx-auto mb-3" />
-          <p className="text-figma-sm font-medium text-figma-primary">No citations found</p>
-          <p className="text-figma-xs text-figma-secondary mt-1">
-            Try adjusting your search or filters
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
+        <CardEmptyState
+          icon={Search}
+          title="No citations found"
+          description="Try adjusting your search or filters"
+          action={{
+            label: 'Clear all filters',
+            onClick: () => {
               onSearchChange('');
               onPlatformChange(null);
               onSentimentChange(null);
-            }}
-            className="mt-3 text-figma-blue"
-          >
-            Clear all filters
-          </Button>
-        </div>
+            },
+          }}
+        />
       ) : (
         <>
           <TableHeader
@@ -487,18 +404,18 @@ function CitationsTable({
             columns={
               isAllTab
                 ? [
-                    { label: 'SOURCE' },
-                    { label: 'TYPE' },
-                    { label: 'PLATFORMS' },
-                    { label: 'CITATIONS', align: 'right' },
-                    { label: 'SENTIMENT', align: 'right' },
+                    { label: 'Source' },
+                    { label: 'Type' },
+                    { label: 'Platforms' },
+                    { label: 'Citations', align: 'right' },
+                    { label: 'Sentiment', align: 'right' },
                   ]
                 : [
-                    { label: 'SOURCE' },
-                    { label: 'PLATFORMS' },
-                    { label: 'CITATIONS', align: 'right' },
-                    { label: 'TREND', align: 'right' },
-                    { label: 'SENTIMENT', align: 'right' },
+                    { label: 'Source' },
+                    { label: 'Platforms' },
+                    { label: 'Citations', align: 'right' },
+                    { label: 'Trend', align: 'right' },
+                    { label: 'Sentiment', align: 'right' },
                   ]
             }
           />
@@ -848,9 +765,14 @@ export function CitationsPage() {
   const [activeTab, setActiveTab] = useState<CitationType | 'all'>(initialTab);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [selectedSentiment, setSelectedSentiment] = useState<CitationSentiment | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => urlParams.get('search') ?? '');
   const [offset, setOffset] = useState(0);
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSearchQuery(new URLSearchParams(search).get('search') ?? '');
+    setOffset(0);
+  }, [search]);
 
   // Data fetching
   const {

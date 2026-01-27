@@ -19,15 +19,15 @@ import { useState, useMemo } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
-import { Lightbulb, HelpCircle, Loader2 } from 'lucide-react';
-import { DEMO_CONFIG } from '@/config/app';
+import { Lightbulb, HelpCircle, Loader2, Search } from 'lucide-react';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
 
 // Shared components
 import { ContentCard } from '@/components/shared/dashboard-card';
 import { SentimentBadge } from '@/components/shared/sentiment-badge';
 import { Skeleton, ChartSkeleton } from '@/components/shared/skeleton-loader';
-import { ErrorState } from '@/components/shared/empty-state';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CardEmptyState, ErrorState } from '@/components/shared/empty-state';
+import { SimpleTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Chart
 import { VisibilityTimeline } from '@/components/charts/visibility-timeline';
@@ -45,6 +45,7 @@ import type { TimeRangePreset, TrendsResponse, TrendDataPoint, PlatformTrendData
 interface ByPlatformTabProps {
   timeRange: TimeRangePreset;
   brandName: string;
+  onAdjustDateRange: () => void;
 }
 
 /** Shape returned by GET /api/metrics/by-platform */
@@ -118,11 +119,12 @@ function scoresToSentiment(sentimentScore: number): 'positive' | 'neutral' | 'ne
 function getDateRange(preset: TimeRangePreset): { from: string; to: string } {
   const to = new Date();
   const from = new Date();
+  if (preset === 'all') from.setFullYear(2020, 0, 1);
   const days: Record<string, number> = {
     '1d': 1, '3d': 3, '7d': 7, '14d': 14, '30d': 30,
     '60d': 60, '90d': 90, '365d': 365,
   };
-  from.setDate(from.getDate() - (days[preset] || 30));
+  if (preset !== 'all') from.setDate(from.getDate() - (days[preset] || 30));
   return {
     from: from.toISOString(),
     to: to.toISOString(),
@@ -187,7 +189,7 @@ function normalizePlatforms(apiPlatforms: PlatformApiMetric[]): NormalizedPlatfo
 // ============================================================================
 
 function usePlatformMetrics(timeRange: TimeRangePreset) {
-  const brandName = DEMO_CONFIG.brandName;
+  const brandName = useActiveWorkspaceName();
   const { from, to } = getDateRange(timeRange);
 
   return useQuery<PlatformApiResponse>({
@@ -233,12 +235,16 @@ function PlatformTrendChart({
   trendsData,
   activePlatforms,
   onTogglePlatform,
+  onAdjustDateRange,
 }: {
   platforms: NormalizedPlatform[];
   trendsData: TrendsResponse | undefined;
   activePlatforms: string[];
   onTogglePlatform: (id: string) => void;
+  onAdjustDateRange: () => void;
 }) {
+  const organizationName = useActiveWorkspaceName();
+
   // Build per-platform timeline data from the trends endpoint
   // The trends endpoint returns TrendDataPoint with date/score/mentions/sentiment
   // Plus byPlatform: { [platformId]: PlatformTrendDataPoint[] } for per-platform time series
@@ -294,9 +300,28 @@ function PlatformTrendChart({
 
   const [, setLocation] = useLocation();
 
-  // Check if all platforms have 0 score (effectively empty)
-  const allPlatformsEmpty = platforms.every(p => p.score === 0);
-  const hasNoData = chartData.length === 0 || allPlatformsEmpty;
+  const hasHistory = trendsData?.hasHistoricalData ?? false;
+  const noDataForRange = hasHistory && trendsData?.hasDataInRange === false;
+  const hasNoData = !hasHistory;
+  const previewLines = useMemo(() => {
+    const today = new Date();
+    const dates = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - index));
+      return date.toISOString().split('T')[0];
+    });
+
+    return PLATFORMS
+      .filter((platform) => activePlatforms.includes(platform.id))
+      .map((platform, platformIndex) => ({
+        name: platform.name,
+        color: platform.color,
+        data: dates.map((date, index) => ({
+          date,
+          visibilityScore: 42 + platformIndex * 2.25,
+        })),
+      }));
+  }, [activePlatforms]);
 
   return (
     <ContentCard
@@ -305,63 +330,87 @@ function PlatformTrendChart({
       actionLabel="View"
       onAction={() => setLocation('/prompts')}
     >
-      {/* Chart + Legend side by side */}
-      <div className="flex gap-4">
-        {/* Chart area - takes remaining space */}
-        <div className="flex-1 min-w-0">
-          <VisibilityTimeline
-            data={chartData}
-            height={320}
-            showArea={false}
-            showTimeRangeSelector={false}
-            brandName={DEMO_CONFIG.brandName}
-            isEmpty={hasNoData}
-            competitorData={allPlatformsEmpty ? [] : competitorLines}
-            showComparisonControls={false}
-            defaultComparisonMode={allPlatformsEmpty ? 'none' : 'competitor'}
-            hideLegend={true}
-            hidePrimaryLine={!allPlatformsEmpty}
-          />
-        </div>
-
-        {/* Right-aligned vertical legend with scroll */}
-        <div className="w-[160px] shrink-0 max-h-[320px] overflow-y-auto border-l border-figma-border-light pl-4">
-          <div className="flex flex-col gap-1.5">
-            {PLATFORMS.map((platform) => {
-              const platformData = platforms.find((p) => p.id === platform.id);
-              const score = platformData?.score ?? 0;
-              const mentions = platformData?.mentions ?? 0;
-              return (
-                <button
-                  key={platform.id}
-                  onClick={() => onTogglePlatform(platform.id)}
-                  className={cn(
-                    'flex items-center gap-2 px-2 py-1 rounded-md text-figma-xs font-medium transition-colors w-full text-left',
-                    activePlatforms.includes(platform.id)
-                      ? 'bg-figma-hover text-figma-primary'
-                      : 'text-figma-muted hover:bg-figma-hover/50'
-                  )}
+      {noDataForRange ? (
+        <CardEmptyState
+          icon={Search}
+          title="No trend data for this period"
+          description="Try a longer date range to see earlier platform results."
+          action={{ label: 'Adjust date filter', onClick: onAdjustDateRange }}
+          className="min-h-[280px]"
+        />
+      ) : (
+        <>
+          <div className="flex gap-4">
+            <div className="flex-1 min-w-0">
+              <SimpleTooltip
+                disabled={!hasNoData}
+                side="top"
+                maxWidth="lg"
+                content="Platform trend lines and scores will appear after AI responses are collected in the selected date range."
+              >
+                <div
+                  role={hasNoData ? 'group' : undefined}
+                  tabIndex={hasNoData ? 0 : undefined}
+                  aria-label={hasNoData ? 'Sample platform visibility chart. Hover or focus for details.' : undefined}
+                  className={hasNoData ? 'cursor-help rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-figma-blue' : undefined}
                 >
-                  <div
-                    className={cn(
-                      'w-2.5 h-2.5 rounded-full shrink-0',
-                      !activePlatforms.includes(platform.id) && 'opacity-40'
-                    )}
-                    style={{ backgroundColor: platform.color }}
+                  <VisibilityTimeline
+                    data={chartData}
+                    height={320}
+                    showArea={false}
+                    showTimeRangeSelector={false}
+                    brandName={organizationName}
+                    isEmpty={hasNoData}
+                    competitorData={hasNoData ? previewLines : competitorLines}
+                    showComparisonControls={false}
+                    defaultComparisonMode="competitor"
+                    hideLegend
+                    hidePrimaryLine
+                    hideTooltip={hasNoData}
                   />
-                  <span className="truncate flex-1 min-w-0" title={platform.name}>{platform.name}</span>
-                  <span className={cn(
-                    'shrink-0 text-figma-2xs tabular-nums',
-                    activePlatforms.includes(platform.id) ? 'text-figma-secondary' : 'text-figma-muted'
-                  )}>
-                    {score}% ({mentions})
-                  </span>
-                </button>
-              );
-            })}
+                </div>
+              </SimpleTooltip>
+            </div>
+
+            <div className="w-[160px] shrink-0 max-h-[320px] overflow-y-auto border-l border-figma-border-light pl-4">
+              <div className="flex flex-col gap-1.5">
+                {PLATFORMS.map((platform) => {
+                  const platformData = platforms.find((p) => p.id === platform.id);
+                  const score = platformData?.score ?? 0;
+                  const mentions = platformData?.mentions ?? 0;
+                  return (
+                    <button
+                      key={platform.id}
+                      onClick={() => onTogglePlatform(platform.id)}
+                      className={cn(
+                        'flex items-center gap-2 px-2 py-1 rounded-md text-figma-xs font-medium transition-colors w-full text-left',
+                        activePlatforms.includes(platform.id)
+                          ? 'bg-figma-hover text-figma-primary'
+                          : 'text-figma-muted hover:bg-figma-hover/50'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'w-2.5 h-2.5 rounded-full shrink-0',
+                          !activePlatforms.includes(platform.id) && 'opacity-40'
+                        )}
+                        style={{ backgroundColor: platform.color }}
+                      />
+                      <span className="truncate flex-1 min-w-0" title={platform.name}>{platform.name}</span>
+                      <span className={cn(
+                        'shrink-0 text-figma-2xs tabular-nums',
+                        activePlatforms.includes(platform.id) ? 'text-figma-secondary' : 'text-figma-muted'
+                      )}>
+                        {hasNoData ? '—' : `${score}% (${mentions})`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </ContentCard>
   );
 }
@@ -383,10 +432,10 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
       {/* Inline table header with tooltip definitions */}
       <TooltipProvider delayDuration={0}>
         <div className="grid grid-cols-[1.5fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 pb-3 px-2 border-b border-figma-border-light">
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase">Platform</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary">Platform</span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Score <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -396,7 +445,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Mentions <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -406,7 +455,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Citation <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -416,7 +465,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Owned <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -426,7 +475,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 3rd party <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -436,7 +485,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Social <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -446,7 +495,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Missed <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -456,7 +505,7 @@ function PlatformTable({ platforms }: { platforms: NormalizedPlatform[] }) {
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help flex items-center justify-end gap-1">
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right cursor-help flex items-center justify-end gap-1">
                 Sentiment <HelpCircle className="w-3 h-3" />
               </span>
             </TooltipTrigger>
@@ -685,15 +734,15 @@ function ByPlatformLoading() {
       <ContentCard title="Platform breakdown" subtitle="Performance metrics for each AI platform">
         {/* Header */}
         <div className="grid grid-cols-[1.5fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr_0.7fr] gap-2 pb-3 px-2 border-b border-figma-border-light">
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase">Platform</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Score</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Mentions</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Citation</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Owned</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">3rd party</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Social</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Missed</span>
-          <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Sentiment</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary">Platform</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Score</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Mentions</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Citation</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Owned</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">3rd party</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Social</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Missed</span>
+          <span className="text-figma-2xs font-medium text-figma-secondary text-right">Sentiment</span>
         </div>
         {/* Skeleton rows */}
         <div>
@@ -727,6 +776,7 @@ function ByPlatformLoading() {
 // ============================================================================
 
 function ByPlatformEmpty() {
+  const organizationName = useActiveWorkspaceName();
   const emptyPlatforms: NormalizedPlatform[] = PLATFORMS.map((p) => ({
     id: p.id,
     name: p.name,
@@ -753,7 +803,7 @@ function ByPlatformEmpty() {
               height={320}
               showArea={false}
               showTimeRangeSelector={false}
-              brandName={DEMO_CONFIG.brandName}
+              brandName={organizationName}
               isEmpty={true}
               showComparisonControls={false}
               hideLegend={true}
@@ -792,7 +842,7 @@ function ByPlatformEmpty() {
 // Main Component
 // ============================================================================
 
-export function ByPlatformTab({ timeRange, brandName }: ByPlatformTabProps) {
+export function ByPlatformTab({ timeRange, brandName, onAdjustDateRange }: ByPlatformTabProps) {
   // Platform toggle state — all ON by default
   const [activePlatforms, setActivePlatforms] = useState<string[]>(
     PLATFORMS.map((p) => p.id)
@@ -881,6 +931,7 @@ export function ByPlatformTab({ timeRange, brandName }: ByPlatformTabProps) {
         trendsData={trendsData}
         activePlatforms={activePlatforms}
         onTogglePlatform={togglePlatform}
+        onAdjustDateRange={onAdjustDateRange}
       />
 
       {/* 2B. Platform Table */}

@@ -20,6 +20,10 @@ import {
 import { cn } from '@/lib/utils';
 import { rechartsProps, getSeriesColor } from '@/components/charts/chart-theme';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tab-set';
+import { SimpleTooltip } from '@/components/ui/tooltip';
+import { CardEmptyState } from '@/components/shared/empty-state';
+import { Search } from 'lucide-react';
+import type { TimeRangePreset } from '@shared/types';
 
 // =============================================================================
 // Metric Tabs (for card header)
@@ -85,8 +89,6 @@ export interface CompetitorTrendsData {
   }>;
 }
 
-import type { TimeRangePreset } from '@shared/types';
-
 interface CompetitorTrendsChartProps {
   data: CompetitorTrendsData;
   height?: number;
@@ -101,6 +103,8 @@ interface CompetitorTrendsChartProps {
   brandName?: string;
   /** Show empty state placeholder */
   isEmpty?: boolean;
+  noDataForRange?: boolean;
+  onAdjustDateRange?: () => void;
   /** Time range for proper x-axis intervals */
   timeRange?: TimeRangePreset;
 }
@@ -145,7 +149,7 @@ function getTimeRangeDays(timeRange?: TimeRangePreset): number {
     case '60d': return 60;
     case '90d': return 90;
     case '365d': return 365;
-    case 'all': return 90; // Default to 90 for "all"
+    case 'all': return 90;
     default: return 7;
   }
 }
@@ -167,14 +171,15 @@ function generatePlaceholderData(brandName: string = 'Your Brand', timeRange?: T
     const dateStr = date.toISOString().split('T')[0];
 
     competitors.forEach((comp, idx) => {
+      const trend = Math.sin((i + idx) / 3 * Math.PI);
       points.push({
         date: dateStr,
         competitorId: comp.id,
         competitorName: comp.name,
         isYou: comp.isYou,
-        visibility: 50 + Math.sin((i + idx) / 3 * Math.PI) * 15,
-        citations: 20 + Math.sin((i + idx) / 4 * Math.PI) * 10,
-        position: idx + 1,
+        visibility: 50 + trend * 15,
+        citations: 20 + trend * 5,
+        position: 3 - trend * 0.6,
       });
     });
   }
@@ -204,7 +209,7 @@ function CustomTooltip({ active, payload, label, metric, competitors, brandName,
 
   return (
     <div className="bg-figma-card border border-figma-border rounded-xl p-3 shadow-xl min-w-[180px]">
-      <div className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide mb-2">
+      <div className="text-figma-2xs font-medium text-figma-secondary tracking-wide mb-2">
         {formatFullDate(dateStr)}
       </div>
       <div className="border-t border-figma-border-light mb-2" />
@@ -254,6 +259,8 @@ export function CompetitorTrendsChart({
   defaultMetric = 'visibility',
   brandName = 'Your Brand',
   isEmpty = false,
+  noDataForRange = false,
+  onAdjustDateRange,
   timeRange,
 }: CompetitorTrendsChartProps) {
   const [internalMetric, setInternalMetric] = useState<TrendMetric>(defaultMetric);
@@ -262,7 +269,6 @@ export function CompetitorTrendsChart({
   // Support both controlled and uncontrolled modes
   const metric = controlledMetric ?? internalMetric;
 
-  // Use placeholder data for empty state
   const displayData = isEmpty ? generatePlaceholderData(brandName, timeRange) : data;
   const { points, competitors } = displayData;
 
@@ -319,52 +325,73 @@ export function CompetitorTrendsChart({
       return [1, maxRank];
     }
     const maxCitations = Math.max(...points.map(p => p.citations), 10);
-    return [0, Math.ceil(maxCitations * 1.1)];
-  }, [points, metric]);
+    return [0, isEmpty ? 30 : Math.ceil(maxCitations * 1.1)];
+  }, [points, metric, isEmpty]);
+
+  const yTicks = isEmpty
+    ? metric === 'visibility'
+      ? [0, 25, 50, 75, 100]
+      : metric === 'citations'
+        ? [0, 10, 20, 30]
+        : [1, 2, 3, 4, 5]
+    : undefined;
 
   const isPositionMetric = metric === 'position';
 
-  return (
-    <div className={cn('w-full', className)}>
-      {/* Chart + Legend side by side (matches by-platform-tab.tsx pattern) */}
-      <div className="flex gap-4">
-        {/* Chart area */}
-        <div className="flex-1 min-w-0" style={{ height }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
-            >
-              <CartesianGrid
-                {...rechartsProps.cartesianGrid}
-                strokeOpacity={isEmpty ? 0.6 : rechartsProps.cartesianGrid.strokeOpacity}
-              />
-              <XAxis
-                dataKey="displayDate"
-                {...rechartsProps.xAxis}
-                interval={chartData.length <= 7 ? 0 : Math.max(0, Math.floor(chartData.length / 7) - 1)}
-                minTickGap={40}
-              />
-              <YAxis
-                domain={yDomain}
-                reversed={isPositionMetric}
-                {...rechartsProps.yAxis}
-                width={35}
-                tickFormatter={(value) => {
-                  if (metric === 'visibility') return `${value}%`;
-                  if (metric === 'position') return `#${value}`;
-                  return String(value);
-                }}
-              />
+  if (noDataForRange) {
+    return (
+      <CardEmptyState
+        icon={Search}
+        title="No trend data for this period"
+        description="Change the date range to look for earlier competitor results."
+        action={onAdjustDateRange ? { label: 'Adjust date filter', onClick: onAdjustDateRange } : undefined}
+        className="min-h-[280px]"
+      />
+    );
+  }
+
+  const chart = (
+    <div className="flex gap-4">
+      {/* Chart area */}
+      <div className="flex-1 min-w-0" style={{ height }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={chartData}
+            margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+          >
+            <CartesianGrid
+              {...rechartsProps.cartesianGrid}
+              strokeOpacity={isEmpty ? 0.6 : rechartsProps.cartesianGrid.strokeOpacity}
+            />
+            <XAxis
+              dataKey="displayDate"
+              {...rechartsProps.xAxis}
+              padding={{ left: 40, right: 10 }}
+              interval={chartData.length <= 7 ? 0 : Math.max(0, Math.floor(chartData.length / 7) - 1)}
+              minTickGap={40}
+            />
+            <YAxis
+              domain={yDomain}
+              reversed={isPositionMetric}
+              {...rechartsProps.yAxis}
+              width={45}
+              ticks={yTicks}
+              interval={0}
+              tickFormatter={(value) => {
+                if (metric === 'visibility') return `${value}%`;
+                if (metric === 'position') return `#${value}`;
+                return String(value);
+              }}
+            />
+            {!isEmpty && (
               <Tooltip
-                content={
+                content={(
                   <CustomTooltip
                     metric={metric}
                     competitors={competitors}
                     brandName={brandName}
-                    isEmpty={isEmpty}
                   />
-                }
+                )}
                 cursor={{
                   stroke: 'var(--figma-border)',
                   strokeWidth: 1,
@@ -372,76 +399,97 @@ export function CompetitorTrendsChart({
                 }}
                 isAnimationActive={false}
               />
+            )}
 
-              {/* Competitor lines - only show active ones */}
-              {currentValues
-                .filter(comp => activeCompetitors.includes(comp.id))
-                .map((comp) => (
-                  <Line
-                    key={comp.id}
-                    type="monotone"
-                    dataKey={comp.name}
-                    name={comp.name}
-                    stroke={comp.color}
-                    strokeWidth={comp.isYou ? 2.5 : 2}
-                    strokeDasharray={isEmpty ? '4 4' : undefined}
-                    strokeOpacity={isEmpty ? 0.5 : 1}
-                    dot={false}
-                    activeDot={isEmpty ? false : {
-                      r: comp.isYou ? 5 : 4,
-                      fill: comp.color,
-                      stroke: 'var(--background)',
-                      strokeWidth: 2,
-                    }}
-                    animationDuration={800}
-                    animationEasing="ease-out"
-                  />
-                ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Right-aligned vertical legend (matches by-platform-tab.tsx) */}
-        <div className="w-[160px] shrink-0 border-l border-figma-border-light pl-4">
-          <div className="flex flex-col gap-1.5">
-            {currentValues.map((comp) => {
-              const isActive = activeCompetitors.includes(comp.id);
-              const displayValue = formatMetricValue(comp.value, metric, isEmpty);
-
-              return (
-                <button
+            {currentValues
+              .filter(comp => activeCompetitors.includes(comp.id))
+              .map((comp) => (
+                <Line
                   key={comp.id}
-                  onClick={() => toggleCompetitor(comp.id)}
+                  type="monotone"
+                  dataKey={comp.name}
+                  name={comp.name}
+                  stroke={comp.color}
+                  strokeWidth={comp.isYou ? 2.5 : 2}
+                  strokeDasharray={isEmpty ? '4 4' : undefined}
+                  strokeOpacity={isEmpty ? 0.5 : 1}
+                  dot={false}
+                  activeDot={isEmpty ? false : {
+                    r: comp.isYou ? 5 : 4,
+                    fill: comp.color,
+                    stroke: 'var(--background)',
+                    strokeWidth: 2,
+                  }}
+                  animationDuration={800}
+                  animationEasing="ease-out"
+                />
+              ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="w-[160px] shrink-0 border-l border-figma-border-light pl-4">
+        <div className="flex flex-col gap-1.5">
+          {currentValues.map((comp) => {
+            const isActive = activeCompetitors.includes(comp.id);
+            const displayValue = formatMetricValue(comp.value, metric, isEmpty);
+
+            return (
+              <button
+                key={comp.id}
+                onClick={() => toggleCompetitor(comp.id)}
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 rounded-md text-figma-xs font-medium transition-colors w-full text-left',
+                  isActive
+                    ? 'bg-figma-hover text-figma-primary'
+                    : 'text-figma-muted hover:bg-figma-hover/50'
+                )}
+              >
+                <div
                   className={cn(
-                    'flex items-center gap-2 px-2 py-1.5 rounded-md text-figma-xs font-medium transition-colors w-full text-left',
-                    isActive
-                      ? 'bg-figma-hover text-figma-primary'
-                      : 'text-figma-muted hover:bg-figma-hover/50'
+                    'w-2.5 h-2.5 rounded-full shrink-0',
+                    !isActive && 'opacity-40'
                   )}
-                >
-                  <div
-                    className={cn(
-                      'w-2.5 h-2.5 rounded-full shrink-0',
-                      !isActive && 'opacity-40'
-                    )}
-                    style={{ backgroundColor: comp.color }}
-                  />
-                  <span className="truncate flex-1 min-w-0" title={comp.isYou ? `${brandName} (You)` : comp.name}>
-                    {comp.isYou ? `${brandName} (You)` : comp.name}
-                  </span>
-                  <span className={cn(
-                    'shrink-0 text-figma-2xs tabular-nums',
-                    isActive ? 'text-figma-secondary' : 'text-figma-muted'
-                  )}>
-                    {displayValue}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                  style={{ backgroundColor: comp.color }}
+                />
+                <span className="truncate flex-1 min-w-0" title={comp.isYou ? `${brandName} (You)` : comp.name}>
+                  {comp.isYou ? `${brandName} (You)` : comp.name}
+                </span>
+                <span className={cn(
+                  'shrink-0 text-figma-2xs tabular-nums',
+                  isActive ? 'text-figma-secondary' : 'text-figma-muted'
+                )}>
+                  {displayValue}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
+  );
+
+  if (isEmpty) {
+    return (
+      <SimpleTooltip
+        side="top"
+        maxWidth="lg"
+        content="Trend lines and metric values will appear after your brand and at least one competitor have analysis results in the selected date range."
+      >
+        <div
+          role="group"
+          tabIndex={0}
+          aria-label="Sample competitor trend chart. Focus or hover for details."
+          className={cn('w-full cursor-help rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-figma-blue', className)}
+        >
+          {chart}
+        </div>
+      </SimpleTooltip>
+    );
+  }
+
+  return (
+    <div className={cn('w-full', className)}>{chart}</div>
   );
 }
 

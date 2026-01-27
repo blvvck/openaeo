@@ -36,6 +36,7 @@ interface CustomerPromptsStepProps {
   error?: string | null;
   onBack: () => void;
   onRunResearch: (prompts: CustomerPrompt[]) => void;
+  onTrackPrompts: (prompts: CustomerPrompt[]) => Promise<boolean>;
   onAddPrompt: (prompt: CustomerPrompt) => void;
   onEditPrompt: (id: string, text: string) => void;
   onRemovePrompt: (id: string) => void;
@@ -184,7 +185,7 @@ function StageSection({
 
   return (
     <div className="mb-6 last:mb-0">
-      <h3 className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide mb-3">
+      <h3 className="text-figma-2xs font-medium text-figma-secondary tracking-wide mb-3">
         {stageInfo.label}{' '}
         <span className="text-figma-muted font-normal normal-case">
           ({stageInfo.description})
@@ -220,6 +221,7 @@ export function CustomerPromptsStep({
   error,
   onBack,
   onRunResearch,
+  onTrackPrompts,
   onAddPrompt,
   onEditPrompt,
   onRemovePrompt,
@@ -231,6 +233,13 @@ export function CustomerPromptsStep({
   const [newPromptText, setNewPromptText] = useState('');
   const [newPromptStage, setNewPromptStage] = useState<JourneyStage>('exploring');
   const [isRunning, setIsRunning] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackedPromptSignature, setTrackedPromptSignature] = useState<string | null>(null);
+  const promptSignature = prompts
+    .map(prompt => `${prompt.stage}:${prompt.text.trim()}`)
+    .sort()
+    .join('\n');
+  const promptsAlreadyTracked = prompts.length > 0 && trackedPromptSignature === promptSignature;
 
   const handleStartEdit = (prompt: CustomerPrompt) => {
     setEditingId(prompt.id);
@@ -268,12 +277,21 @@ export function CustomerPromptsStep({
     onRunResearch(prompts);
   };
 
+  const handleTrackPrompts = async () => {
+    setIsTracking(true);
+    try {
+      if (await onTrackPrompts(prompts)) setTrackedPromptSignature(promptSignature);
+    } finally {
+      setIsTracking(false);
+    }
+  };
+
   const canRun = prompts.length > 0;
 
   return (
     <div className="max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h2 className="text-h2 font-semibold text-figma-primary">
             Prompts to track
@@ -290,7 +308,7 @@ export function CustomerPromptsStep({
             className="text-figma-sm"
           >
             <Plus className="w-4 h-4 mr-1.5" />
-            Add prompt
+            Add question
           </Button>
         )}
       </div>
@@ -364,7 +382,7 @@ export function CustomerPromptsStep({
             className="text-figma-sm"
           >
             <Plus className="w-3.5 h-3.5 mr-1.5" />
-            Add prompt
+            Add question
           </Button>
         </div>
       )}
@@ -379,20 +397,37 @@ export function CustomerPromptsStep({
         >
           Back
         </Button>
-        <Button
-          onClick={handleRunResearch}
-          className="bg-figma-blue text-white hover:bg-blue-600"
-          disabled={!canRun || isLoading || isRunning}
-        >
-          {isRunning ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            'Start analysis'
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {!isLoading && prompts.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleTrackPrompts}
+              disabled={isTracking || promptsAlreadyTracked || isRunning}
+              className="text-figma-sm"
+            >
+              {isTracking
+                ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                : promptsAlreadyTracked
+                  ? <Check className="w-4 h-4 mr-1.5" />
+                  : <Plus className="w-4 h-4 mr-1.5" />}
+              {isTracking ? 'Adding…' : promptsAlreadyTracked ? 'Added to my prompts' : 'Add to my prompts'}
+            </Button>
           )}
-        </Button>
+          <Button
+            onClick={handleRunResearch}
+            className="bg-figma-blue text-white hover:bg-blue-600"
+            disabled={!canRun || isLoading || isRunning}
+          >
+            {isRunning ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              'Start analysis'
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Add Prompt Modal */}

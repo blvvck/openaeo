@@ -1,4 +1,4 @@
-export { EmptyState, ErrorState } from './empty-state';
+export { EmptyState, CardEmptyState, ErrorState } from './empty-state';
 export {
   Skeleton,
   TextSkeleton,
@@ -14,7 +14,7 @@ export {
 // Dashboard shared components
 export { ContentCard, MetricCard } from './dashboard-card';
 export { SentimentBadge, SENTIMENT_COLORS, SENTIMENT_TEXT } from './sentiment-badge';
-export { StatMetric, HoverArrow, CardLabel, CardSubtitle, CardDivider } from './stat-metric';
+export { StatMetric, MetricStatCard, MetricListScroller, HoverArrow, CardLabel, CardSubtitle, CardDivider } from './stat-metric';
 export { CardFooterSummary } from './card-footer-summary';
 export { PlatformRow, PlatformProgressRow, TableHeader } from './platform-row';
 

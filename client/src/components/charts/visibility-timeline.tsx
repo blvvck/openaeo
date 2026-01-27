@@ -71,6 +71,8 @@ interface VisibilityTimelineProps {
   hideLegend?: boolean;
   /** Hide the primary/aggregate line (useful when showing only competitor lines) */
   hidePrimaryLine?: boolean;
+  /** Hide the point tooltip when an outer sample-preview tooltip is used */
+  hideTooltip?: boolean;
 }
 
 /**
@@ -115,7 +117,7 @@ function EmptyTooltip({ active, payload }: {
     <div className="bg-popover/95 backdrop-blur-sm border border-border rounded-xl p-3 shadow-xl min-w-[200px] max-w-[220px]">
       {/* Date + Score header on same line */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <span className="text-xs font-medium text-muted-foreground tracking-wide">
           {formatFullDate(dateStr)}
         </span>
         <span className="text-lg font-semibold text-muted-foreground/50 tabular-nums">--</span>
@@ -199,7 +201,7 @@ function CustomTooltip({ active, payload, label, comparisonMode, brandName, show
     <div className="bg-popover border border-border rounded-xl p-3 shadow-xl min-w-[200px] max-w-[220px] isolate z-50">
       {/* Date + Aggregate Score on same line */}
       <div className="flex items-center justify-between gap-4 mb-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        <span className="text-xs font-medium text-muted-foreground tracking-wide">
           {formatFullDate(data.date)}
         </span>
         {data.visibilityScore !== undefined && (
@@ -305,6 +307,7 @@ export function VisibilityTimeline({
   showPlatformBreakdown = false,
   hideLegend = false,
   hidePrimaryLine = false,
+  hideTooltip = false,
 }: VisibilityTimelineProps) {
   const { range, setRange } = useTimeRange('30d');
   const currentRange = timeRange || range;
@@ -452,15 +455,19 @@ export function VisibilityTimeline({
             <XAxis
               dataKey="displayDate"
               {...rechartsProps.xAxis}
+              padding={{ left: 40, right: 10 }}
               interval={Math.max(0, Math.floor(chartData.length / 7) - 1)}
               minTickGap={40}
             />
             <YAxis
               domain={[0, 100]}
               {...rechartsProps.yAxis}
-              width={35}
+              width={45}
+              ticks={isEmpty ? [0, 25, 50, 75, 100] : undefined}
+              interval={isEmpty ? 0 : undefined}
+              tickFormatter={(value) => `${value}%`}
             />
-            <Tooltip
+            {!hideTooltip && <Tooltip
               content={
                 isEmpty ? (
                   <EmptyTooltip />
@@ -486,7 +493,7 @@ export function VisibilityTimeline({
                 visibility: 'visible',
               }}
               offset={15}
-            />
+            />}
 
             {hasComparison && !hideLegend && (
               <Legend
@@ -531,7 +538,9 @@ export function VisibilityTimeline({
                 dataKey={comp.name}
                 name={comp.name}
                 stroke={comp.color || getSeriesColor(i + 1)}
-                strokeWidth={2}
+                strokeWidth={isEmpty ? 1.5 : 2}
+                strokeDasharray={isEmpty ? '5 5' : undefined}
+                strokeOpacity={isEmpty ? 0.45 : 1}
                 dot={false}
                 animationDuration={1000}
               />

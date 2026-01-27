@@ -2,6 +2,16 @@
 
 import { Router, Request, Response } from 'express';
 import { storage } from '../data';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { prismaRoot } from '../prisma';
+
+async function workspaceNameFallback(): Promise<string> {
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) return 'Your organization';
+  const workspace = await prismaRoot.workspaces.findUnique({ where: { id: workspaceId }, select: { name: true } });
+  return workspace?.name ?? 'Your organization';
+}
+
 import { getActiveBrandConfig } from '../services/brand-config';
 import { calculateVisibilityScore, PLATFORMS, type VisibilityScore } from '../services/analytics/visibility-calculator';
 import { compareCompetitors } from '../services/analytics/competitor-detector';
@@ -682,6 +692,7 @@ async function computeDashboardData(
 ): Promise<DashboardResponse> {
   const { start, end } = getTimeWindow(timeRange, startDate, endDate);
   const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
+  const workspaceId = currentWorkspaceId();
 
   // =========================================================================
   // PHASE 1: Parallel data fetching (with time-filtered queries)
@@ -693,6 +704,7 @@ async function computeDashboardData(
     competitors,
     activeBrandConfig,
     alertHistory,
+    historicalResponseCount,
   ] = await Promise.all([
     // Time-filtered queries at DB level
     storage.getResponsesInTimeRange(start, end),
@@ -700,13 +712,14 @@ async function computeDashboardData(
     storage.getCompetitors(),
     getActiveBrandConfig(),
     alertRulesEngine.getAlertHistory(100),
+    workspaceId ? prismaRoot.responses.count({ where: { workspace_id: workspaceId } }) : Promise.resolve(0),
   ]);
 
   // Check for empty state early
   const hasResponses = currentResponsesRaw.length > 0 || previousResponsesRaw.length > 0;
   if (!hasResponses) {
     const onboarding = await getOnboardingSteps(false);
-    return createEmptyResponse(onboarding);
+    return createEmptyResponse(onboarding, historicalResponseCount > 0);
   }
 
   // =========================================================================
@@ -715,7 +728,7 @@ async function computeDashboardData(
   const currentResponses = precomputeSentiment(currentResponsesRaw);
   const previousResponses = precomputeSentiment(previousResponsesRaw);
 
-  const brandName = activeBrandConfig?.name || 'Your Brand';
+  const brandName = activeBrandConfig?.name || await workspaceNameFallback();
   const competitorNames = competitors.map(c => c.name);
 
   // =========================================================================
@@ -1026,6 +1039,10 @@ async function computeDashboardData(
   // =========================================================================
   return {
     brandName,
+    period: {
+      hasHistoricalData: historicalResponseCount > 0,
+      hasDataInRange: currentResponsesRaw.length > 0,
+    },
     cardSubtitles,
     visibility: {
       score: Math.round(currentVisibility.score),
@@ -1063,9 +1080,10 @@ async function computeDashboardData(
 /**
  * Create empty dashboard response
  */
-function createEmptyResponse(onboarding: Awaited<ReturnType<typeof getOnboardingSteps>>): DashboardResponse {
+function createEmptyResponse(onboarding: Awaited<ReturnType<typeof getOnboardingSteps>>, hasHistoricalData = false): DashboardResponse {
   return {
     brandName: undefined,
+    period: { hasHistoricalData, hasDataInRange: false },
     cardSubtitles: {
       llmMentions: "Where you're visible",
       competitorRankings: 'Your position in the market',

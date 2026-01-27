@@ -261,6 +261,10 @@ export interface CardSubtitles {
  */
 export interface DashboardResponse {
   brandName?: string;  // Current brand name for display
+  period: {
+    hasHistoricalData: boolean;
+    hasDataInRange: boolean;
+  };
   cardSubtitles: CardSubtitles;
   visibility: {
     score: number;                    // 0-100

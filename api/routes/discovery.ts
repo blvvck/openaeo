@@ -3,6 +3,7 @@
 import { Router, Request, Response } from 'express';
 import { storage } from '../data';
 import { getActiveBrandConfig } from '../services/brand-config';
+import { currentWorkspaceId } from '../context/workspace-context';
 import { getSimpleSentiment } from '../services/analytics/sentiment-analyzer';
 import { analyzeCitations, type Citation as AnalysisCitation } from '../services/analytics/citation-tracker';
 import type {
@@ -170,7 +171,9 @@ function classifyCitation(
 router.get('/overview', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '30d';
-    const cacheKey = `discovery:overview:${timeRange}`;
+    const workspaceId = currentWorkspaceId();
+    if (!workspaceId) return res.status(401).json({ message: 'Workspace context is required' });
+    const cacheKey = `discovery:overview:${workspaceId}:${timeRange}`;
 
     // Check cache
     const cached = getCached<FunnelCoverageResponse>(cacheKey);

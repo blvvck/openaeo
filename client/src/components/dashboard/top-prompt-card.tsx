@@ -13,7 +13,7 @@ import {
 
 interface TopPromptCardProps {
     prompt: string;
-    mentionCount: number;
+    mentionCount: number | string;
     mentionTrend: number;
     platforms: {
         id: string;
@@ -22,6 +22,7 @@ interface TopPromptCardProps {
     }[];
     onClick?: () => void;
     className?: string;
+    noPeriodData?: boolean;
 }
 
 /**
@@ -35,6 +36,7 @@ export function TopPromptCard({
     platforms,
     onClick,
     className,
+    noPeriodData = false,
 }: TopPromptCardProps) {
     const trendSign = mentionTrend > 0 ? '+' : '';
     const isPositive = mentionTrend > 0;
@@ -69,13 +71,13 @@ export function TopPromptCard({
             {/* Prompt Text - taller to push subtitle down to align with other cards */}
             <div className="h-[48px] flex items-start mt-2 mb-1 overflow-hidden">
                 <h3 className="text-figma-md font-semibold text-figma-primary leading-tight line-clamp-2">
-                    &ldquo;{prompt}&rdquo;
+                    {noPeriodData ? '—' : <>&ldquo;{prompt}&rdquo;</>}
                 </h3>
             </div>
 
             {/* Subtitle - aligns with "of responses cite you" and "past 7 days" */}
             <div className="flex items-center gap-2">
-                <span className="text-figma-2xs font-normal text-figma-muted">{mentionCount} mentions</span>
+                <span className="text-figma-2xs font-normal text-figma-muted">{noPeriodData ? '—' : mentionCount} mentions</span>
                 <span className={cn("text-figma-2xs font-medium", trendColor)}>
                     {isNeutral ? '—%' : `${trendSign}${mentionTrend}%`}
                 </span>
@@ -84,29 +86,34 @@ export function TopPromptCard({
             <CardDivider />
 
             {/* Platform Rows - vertical scroll for overflow */}
-            <div className="max-h-[100px] overflow-y-auto scrollbar-none space-y-3">
-                {platforms.length > 0 ? (
-                    platforms.map((p) => (
-                        <PlatformRow
-                            key={p.id}
-                            platformId={p.id}
-                            value={`${p.percentage}%`}
-                            secondaryValue={p.count}
-                        />
-                    ))
-                ) : (
-                    // Empty state - show platforms with "—" values
-                    PLATFORMS.slice(0, 5).map((p) => (
-                        <PlatformRow
-                            key={p.id}
-                            platformId={p.id}
-                            value="—%"
-                            secondaryValue="—"
-                            muted
-                        />
-                    ))
-                )}
-            </div>
+            {noPeriodData ? (
+                <div className="flex min-h-[100px] items-center justify-center px-2 text-center text-figma-2xs text-figma-muted">
+                    No results in this period
+                </div>
+            ) : (
+                <div className="max-h-[100px] overflow-y-auto scrollbar-none space-y-3">
+                    {platforms.length > 0 ? (
+                        platforms.map((p) => (
+                            <PlatformRow
+                                key={p.id}
+                                platformId={p.id}
+                                value={`${p.percentage}%`}
+                                secondaryValue={p.count}
+                            />
+                        ))
+                    ) : (
+                        PLATFORMS.slice(0, 5).map((p) => (
+                            <PlatformRow
+                                key={p.id}
+                                platformId={p.id}
+                                value="—%"
+                                secondaryValue="—"
+                                muted
+                            />
+                        ))
+                    )}
+                </div>
+            )}
         </MetricCard>
     );
 }

@@ -7,7 +7,7 @@
 
 import { cn } from '@/lib/utils';
 import { Info } from 'lucide-react';
-import { MetricCard, CardLabel, CardSubtitle, CardDivider, StatMetric, Skeleton } from '@/components/shared';
+import { MetricCard, MetricListScroller, CardLabel, CardSubtitle, CardDivider, StatMetric, Skeleton } from '@/components/shared';
 import { PlatformIcon, PLATFORMS } from '@/components/ui/platform-icon';
 import { CompanyAvatar } from '@/components/ui/company-avatar';
 import {
@@ -35,6 +35,14 @@ function InfoTooltip({ content }: { content: string }) {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+function PeriodEmpty({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex min-h-[110px] w-full min-w-0 items-center justify-center break-words px-2 text-center text-figma-2xs text-figma-muted', className)}>
+      No results in this period
+    </div>
   );
 }
 
@@ -111,9 +119,10 @@ interface YourRankCardProps {
   data: YourRankData | null;
   isLoading?: boolean;
   brandName?: string;
+  noPeriodData?: boolean;
 }
 
-export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: YourRankCardProps) {
+export function YourRankCard({ data, isLoading, brandName = 'Your Brand', noPeriodData = false }: YourRankCardProps) {
   // Empty state: no data OR only "you" in the ranking (no real competitors)
   const isEmpty = !data || data.totalCompetitors <= 1;
 
@@ -124,15 +133,17 @@ export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: Your
         <Skeleton className="h-4 w-20 rounded" />
         <Skeleton className="h-8 w-24 mt-2 mb-1 rounded" />
         <Skeleton className="h-3 w-36 rounded" />
-        <CardDivider className="mt-5 mb-3" />
-        <div className="flex-1 overflow-y-auto scrollbar-none">
-          {/* Column headers skeleton */}
-          <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
+        <CardDivider className="mt-5 mb-1.5" />
+        <MetricListScroller
+          header={
+            <div className="flex items-center gap-2">
             <Skeleton className="h-2.5 w-5 rounded" />
             <Skeleton className="h-2.5 w-4 rounded" />
             <Skeleton className="h-2.5 flex-1 rounded" />
             <Skeleton className="h-2.5 w-8 rounded" />
-          </div>
+            </div>
+          }
+        >
           {/* Data rows skeleton */}
           <div className="space-y-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -144,7 +155,7 @@ export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: Your
               </div>
             ))}
           </div>
-        </div>
+        </MetricListScroller>
       </MetricCard>
     );
   }
@@ -156,13 +167,13 @@ export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: Your
         <InfoTooltip content="Your visibility ranking among tracked competitors across all LLM platforms" />
       </div>
 
-      {isEmpty ? (
+      {isEmpty || noPeriodData ? (
         <>
           <div className="h-[38px] flex items-baseline gap-2 mt-2 mb-1">
             <span className="text-figma-lg font-bold text-figma-primary">#—</span>
             <span className="text-figma-base text-figma-secondary">of —</span>
           </div>
-          <CardSubtitle>Add competitors to see rankings</CardSubtitle>
+          <CardSubtitle>{noPeriodData ? '—' : 'Add competitors to see rankings'}</CardSubtitle>
         </>
       ) : (
         <>
@@ -188,19 +199,21 @@ export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: Your
         </>
       )}
 
-      <CardDivider className="mt-5 mb-3" />
+      <CardDivider className="mt-5 mb-1.5" />
 
       {/* Competitor list with avatars and positions */}
-      <div className="flex-1 overflow-y-auto scrollbar-none">
-        {/* Column headers */}
-        <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
+      <MetricListScroller
+        header={
+          <div className="flex items-center gap-2">
           <span className="text-figma-2xs font-medium text-figma-muted w-5">Rank</span>
           <span className="text-figma-2xs font-medium text-figma-muted w-5"></span>
           <span className="text-figma-2xs font-medium text-figma-muted flex-1">Company</span>
           <span className="text-figma-2xs font-medium text-figma-muted w-8 text-right">Score</span>
-        </div>
+          </div>
+        }
+      >
 
-        <div className="space-y-1.5">
+        {noPeriodData ? <PeriodEmpty /> : <div className="space-y-1.5">
         {isEmpty ? (
           // Empty state: show placeholder rows (your brand first for emphasis, not rank)
           [`${brandName} (You)`, 'Competitor 1', 'Competitor 2', 'Competitor 3'].map((name, idx) => (
@@ -257,8 +270,8 @@ export function YourRankCard({ data, isLoading, brandName = 'Your Brand' }: Your
             </div>
           ))
         )}
-        </div>
-      </div>
+        </div>}
+      </MetricListScroller>
     </MetricCard>
   );
 }
@@ -365,9 +378,10 @@ interface ShareOfAnswerCardProps {
   data: ShareOfAnswerData | null;
   isLoading?: boolean;
   brandName?: string;
+  noPeriodData?: boolean;
 }
 
-export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand' }: ShareOfAnswerCardProps) {
+export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand', noPeriodData = false }: ShareOfAnswerCardProps) {
   // Empty state: no data OR only "you" in competitor shares (no real competitors)
   const hasRealCompetitors = data?.competitorShares && data.competitorShares.filter(c => !c.isYou).length > 0;
   const isEmpty = !data || !hasRealCompetitors;
@@ -379,8 +393,8 @@ export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand' }:
         <Skeleton className="h-4 w-28 rounded" />
         <Skeleton className="h-8 w-20 mt-2 mb-1 rounded" />
         <Skeleton className="h-3 w-32 rounded" />
-        <CardDivider className="mt-5 mb-3" />
-        <div className="flex-1 overflow-x-auto scrollbar-none">
+        <CardDivider className="mt-5 mb-1.5" />
+        <div className="min-h-0 flex-1 overflow-auto scrollbar-none">
           {/* Table header skeleton */}
           <div className="flex items-center pb-1.5 border-b border-figma-border-light">
             <Skeleton className="h-3 w-[60px] rounded mr-1" />
@@ -412,13 +426,13 @@ export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand' }:
         <InfoTooltip content="Percentage of tracked prompts where your brand appears in the LLM response" />
       </div>
 
-      {isEmpty ? (
+      {isEmpty || noPeriodData ? (
         <>
           <div className="h-[38px] flex items-baseline gap-2 mt-2 mb-1">
-            <span className="text-figma-lg font-bold text-figma-primary">0.0%</span>
+            <span className="text-figma-lg font-bold text-figma-primary">{noPeriodData ? '—%' : '0.0%'}</span>
             <span className="text-figma-sm font-medium text-figma-secondary">—%</span>
           </div>
-          <CardSubtitle>of 0 tracked prompts</CardSubtitle>
+          <CardSubtitle>of {noPeriodData ? '—' : '0'} tracked prompts</CardSubtitle>
         </>
       ) : (
         <>
@@ -427,106 +441,127 @@ export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand' }:
         </>
       )}
 
-      <CardDivider className="mt-5 mb-3" />
+      <CardDivider className="mt-5 mb-1.5" />
 
       {/* Competitor comparison table */}
-      <div className="flex-1 overflow-x-auto scrollbar-none">
+      <div className="flex min-h-0 flex-1 flex-col">
         {!isEmpty && data?.competitorShares && data.competitorShares.length > 0 ? (
           (() => {
-            // Sort: You first, then by rank
             const sorted = [...data.competitorShares].sort((a, b) => {
               if (a.isYou) return -1;
               if (b.isYou) return 1;
               return a.rank - b.rank;
             });
-            // Take top 4, ensure no duplicate "You"
             const uniqueCompetitors = sorted.filter((comp, idx, arr) =>
               arr.findIndex(c => c.name === comp.name) === idx
             ).slice(0, 4);
 
+            const colgroup = (
+              <colgroup>
+                <col style={{ width: 60 }} />
+                {uniqueCompetitors.map((comp) => (
+                  <col key={comp.name} />
+                ))}
+              </colgroup>
+            );
+
             return (
-              <table className="w-full text-figma-2xs">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="border-b border-figma-border-light">
-                    <th className="text-left font-medium text-figma-muted pb-1.5 pr-1 w-[60px]">Platform</th>
-                    {uniqueCompetitors.map((comp) => (
-                      <th
-                        key={comp.name}
-                        className={cn(
-                          "text-center font-medium pb-1.5 px-0.5 max-w-[52px]",
-                          comp.isYou ? "text-figma-blue" : "text-figma-muted"
-                        )}
-                        title={comp.isYou ? `You (#${comp.rank})` : `#${comp.rank} ${comp.name}`}
-                      >
-                        <span className="block truncate">
+              <>
+                <table className="w-full table-fixed border-separate border-spacing-0 text-figma-2xs">
+                  {colgroup}
+                  <thead>
+                    <tr>
+                      <th className="border-b border-figma-border-light pb-1.5 pr-1 text-left font-medium text-figma-muted">Platform</th>
+                      {uniqueCompetitors.map((comp) => (
+                        <th
+                          key={comp.name}
+                          className={cn(
+                            "truncate border-b border-figma-border-light pb-1.5 px-0.5 text-center font-medium",
+                            comp.isYou ? "text-figma-blue" : "text-figma-muted"
+                          )}
+                        >
                           {comp.isYou ? `You (#${comp.rank})` : `#${comp.rank} ${comp.name}`}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                  <tbody className="[&>tr:first-child>td]:pt-1.5">
-                    {PLATFORMS.slice(0, 5).map((platform) => (
-                      <tr key={platform.id}>
-                        <td className="py-1 pr-1 w-[60px]">
-                          <div className="flex items-center gap-1">
-                            <PlatformIcon platform={platform.id} size="xs" />
-                            <span className="truncate text-figma-muted max-w-[40px]">{platform.name}</span>
-                          </div>
-                        </td>
-                        {uniqueCompetitors.map((comp) => {
-                          const share = comp.shares[platform.id];
-                          return (
-                            <td
-                              key={`${platform.id}-${comp.name}`}
-                              className={cn(
-                                "text-center py-1 px-0.5 tabular-nums",
-                                comp.isYou ? "font-medium text-figma-primary" : "text-figma-secondary"
-                              )}
-                            >
-                              {share != null ? `${share}%` : '—'}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
                 </table>
+              <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
+                {noPeriodData ? <PeriodEmpty /> : <table className="w-full table-fixed text-figma-2xs">
+                    {colgroup}
+                    <tbody>
+                      {PLATFORMS.slice(0, 5).map((platform) => (
+                        <tr key={platform.id}>
+                          <td className="py-1 pr-1">
+                            <div className="flex items-center gap-1">
+                              <PlatformIcon platform={platform.id} size="xs" />
+                              <span className="truncate text-figma-muted">{platform.name}</span>
+                            </div>
+                          </td>
+                          {uniqueCompetitors.map((comp) => {
+                            const share = comp.shares[platform.id];
+                            return (
+                              <td
+                                key={`${platform.id}-${comp.name}`}
+                                className={cn(
+                                  "text-center py-1 px-0.5 tabular-nums",
+                                  comp.isYou ? "font-medium text-figma-primary" : "text-figma-secondary"
+                                )}
+                              >
+                                {share != null ? `${share}%` : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>}
+                </div>
+              </>
             );
           })()
         ) : (
-          /* Empty state: show table structure with placeholder competitors */
-          <table className="w-full text-figma-2xs">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b border-figma-border-light">
-                <th className="text-left font-medium text-figma-muted pb-1.5 pr-1 w-[60px]">Platform</th>
-                <th className="text-center font-medium text-figma-blue pb-1.5 px-0.5 max-w-[52px]" title={`${brandName} (You)`}>
-                  <span className="block truncate">{brandName}</span>
-                </th>
-                <th className="text-center font-medium text-figma-muted pb-1.5 px-0.5 max-w-[52px]">
-                  <span className="block truncate">Comp 1</span>
-                </th>
-                <th className="text-center font-medium text-figma-muted pb-1.5 px-0.5 max-w-[52px]">
-                  <span className="block truncate">Comp 2</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="[&>tr:first-child>td]:pt-1.5">
-              {PLATFORMS.slice(0, 4).map((platform) => (
-                <tr key={platform.id}>
-                  <td className="py-1 pr-1 w-[60px]">
-                    <div className="flex items-center gap-1">
-                      <PlatformIcon platform={platform.id} size="xs" />
-                      <span className="truncate text-figma-muted max-w-[40px]">{platform.name}</span>
-                    </div>
-                  </td>
-                  <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
-                  <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
-                  <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
+          <>
+            <table className="w-full table-fixed border-separate border-spacing-0 text-figma-2xs">
+              <colgroup>
+                <col style={{ width: 60 }} />
+                <col /><col /><col />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th className="border-b border-figma-border-light pb-1.5 pr-1 text-left font-medium text-figma-muted">Platform</th>
+                  <th className="truncate border-b border-figma-border-light pb-1.5 px-0.5 text-center font-medium text-figma-blue" title={`${brandName} (You)`}>
+                    {brandName}
+                  </th>
+                  <th className="border-b border-figma-border-light pb-1.5 px-0.5 text-center font-medium text-figma-muted">Comp 1</th>
+                  <th className="border-b border-figma-border-light pb-1.5 px-0.5 text-center font-medium text-figma-muted">Comp 2</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+            </table>
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
+              {noPeriodData ? <PeriodEmpty /> : <table className="w-full table-fixed text-figma-2xs">
+                <colgroup>
+                  <col style={{ width: 60 }} />
+                  <col /><col /><col />
+                </colgroup>
+                <tbody>
+                  {PLATFORMS.slice(0, 4).map((platform) => (
+                    <tr key={platform.id}>
+                      <td className="py-1 pr-1">
+                        <div className="flex items-center gap-1">
+                          <PlatformIcon platform={platform.id} size="xs" />
+                          <span className="truncate text-figma-muted">{platform.name}</span>
+                        </div>
+                      </td>
+                      <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
+                      <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
+                      <td className="text-center py-1 px-0.5 text-figma-muted">—</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>}
+            </div>
+          </>
         )}
       </div>
     </MetricCard>
@@ -555,6 +590,7 @@ interface HighIntentData {
 interface HighIntentCardProps {
   data: HighIntentData | null;
   isLoading?: boolean;
+  noPeriodData?: boolean;
 }
 
 // Topic badge colors
@@ -575,7 +611,7 @@ function TopicBadge({ topic }: { topic: string }) {
   );
 }
 
-export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
+export function HighIntentCard({ data, isLoading, noPeriodData = false }: HighIntentCardProps) {
   const isEmpty = !data;
   const queries = data?.queries || [];
 
@@ -586,14 +622,16 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
         <Skeleton className="h-4 w-36 rounded" />
         <Skeleton className="h-8 w-16 mt-2 mb-1 rounded" />
         <Skeleton className="h-3 w-32 rounded" />
-        <CardDivider className="mt-5 mb-3" />
-        <div className="flex-1 overflow-y-auto scrollbar-none">
-          {/* Column headers skeleton */}
-          <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
+        <CardDivider className="mt-5 mb-1.5" />
+        <MetricListScroller
+          header={
+            <div className="flex items-center gap-2">
             <Skeleton className="h-2.5 flex-1 rounded" />
             <Skeleton className="h-2.5 w-[70px] rounded" />
             <Skeleton className="h-2.5 w-8 rounded" />
-          </div>
+            </div>
+          }
+        >
           {/* Data rows skeleton */}
           <div className="space-y-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -604,7 +642,7 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
               </div>
             ))}
           </div>
-        </div>
+        </MetricListScroller>
       </MetricCard>
     );
   }
@@ -616,13 +654,13 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
         <InfoTooltip content="Coverage of prompts with buyer intent signals like 'best', 'vs', 'alternatives'" />
       </div>
 
-      {isEmpty || data?.percentage === 0 ? (
+      {noPeriodData || isEmpty || data?.percentage === 0 ? (
         <>
           <div className="h-[38px] flex items-baseline gap-2 mt-2 mb-1">
-            <span className="text-figma-lg font-bold text-figma-primary">0%</span>
+            <span className="text-figma-lg font-bold text-figma-primary">{noPeriodData ? '—%' : '0%'}</span>
             <span className="text-figma-sm font-medium text-figma-secondary">—%</span>
           </div>
-          <CardSubtitle>of {data?.total ?? 0} buyer-intent queries</CardSubtitle>
+          <CardSubtitle>of {noPeriodData ? '—' : data?.total ?? 0} buyer-intent queries</CardSubtitle>
         </>
       ) : (
         <>
@@ -633,19 +671,19 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
         </>
       )}
 
-      <CardDivider className="mt-5 mb-3" />
+      <CardDivider className="mt-5 mb-1.5" />
 
       {/* Query table: Query | Topic | Coverage */}
-      <div className="flex-1 overflow-y-auto scrollbar-none">
-        {/* Column headers */}
-        <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-          <span className="text-figma-2xs font-medium text-figma-muted flex-1">Query</span>
-          <span className="text-figma-2xs font-medium text-figma-muted w-[70px] text-center">Topic</span>
-          <span className="text-figma-2xs font-medium text-figma-muted w-8 text-right">%</span>
-        </div>
-
-        {/* Table rows */}
-        <div className="space-y-1.5">
+      <MetricListScroller
+        header={
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-figma-2xs font-medium text-figma-muted">Query</span>
+            <span className="w-[70px] text-center text-figma-2xs font-medium text-figma-muted">Topic</span>
+            <span className="w-8 text-right text-figma-2xs font-medium text-figma-muted">%</span>
+          </div>
+        }
+      >
+        {noPeriodData ? <PeriodEmpty /> : <div className="space-y-1.5">
           {queries.length > 0 ? (
             queries.slice(0, 4).map((q, idx) => (
               <div key={idx} className="flex items-center gap-2">
@@ -678,8 +716,8 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
               </div>
             ))
           )}
-        </div>
-      </div>
+        </div>}
+      </MetricListScroller>
     </MetricCard>
   );
 }
@@ -691,10 +729,16 @@ export function HighIntentCard({ data, isLoading }: HighIntentCardProps) {
 interface CitationRateCardProps {
   data: CitationRateData | null;
   isLoading?: boolean;
+  noPeriodData?: boolean;
 }
 
-export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCardProps) {
+export function CitationRateCompetitorCard({ data, isLoading, noPeriodData = false }: CitationRateCardProps) {
   const isEmpty = !data;
+  const sourceGroups = [
+    { label: 'Owned', color: CITATION_COLORS.owned, percentage: data?.sources?.owned.percentage, sites: data?.sources?.owned.sites ?? [] },
+    { label: '3rd party', color: CITATION_COLORS.thirdParty, percentage: data?.sources?.thirdParty.percentage, sites: data?.sources?.thirdParty.sites ?? [] },
+    { label: 'Social', color: CITATION_COLORS.social, percentage: data?.sources?.social.percentage, sites: data?.sources?.social.sites ?? [] },
+  ];
 
   // Loading skeleton — matches: title, metric, subtitle, divider, donut + two columns (Owned/3rd party) with 4 cites each
   if (isLoading) {
@@ -703,7 +747,7 @@ export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCard
         <Skeleton className="h-4 w-24 rounded" />
         <Skeleton className="h-8 w-20 mt-2 mb-1 rounded" />
         <Skeleton className="h-3 w-20 rounded" />
-        <CardDivider className="mt-5 mb-3" />
+        <CardDivider className="mt-5 mb-1.5" />
         <div className="flex-1 flex gap-3">
           {/* Mini donut skeleton */}
           <div className="shrink-0 flex items-start pt-5">
@@ -750,13 +794,13 @@ export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCard
         <InfoTooltip content="Percentage of LLM mentions that include a link to your site" />
       </div>
 
-      {isEmpty || data?.percentage === 0 ? (
+      {noPeriodData || isEmpty || data?.percentage === 0 ? (
         <>
           <div className="h-[38px] flex items-baseline gap-2 mt-2 mb-1">
-            <span className="text-figma-lg font-bold text-figma-primary">0.0%</span>
+            <span className="text-figma-lg font-bold text-figma-primary">{noPeriodData ? '—%' : '0.0%'}</span>
             <span className="text-figma-sm font-medium text-figma-secondary">—%</span>
           </div>
-          <CardSubtitle>{data?.totalCitations ?? 0} citations</CardSubtitle>
+          <CardSubtitle>{noPeriodData ? '—' : data?.totalCitations ?? 0} citations</CardSubtitle>
         </>
       ) : (
         <>
@@ -765,7 +809,7 @@ export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCard
         </>
       )}
 
-      <CardDivider className="mt-5 mb-3" />
+      <CardDivider className="mt-5 mb-1.5" />
 
       {/* Donut + two columns of citing sites */}
       <div className="flex-1 flex gap-3">
@@ -775,62 +819,37 @@ export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCard
         </div>
 
         {/* Three columns: Owned | Third-party | Social (scroll for Social) */}
-        <div className="flex-1 overflow-x-auto scrollbar-hover min-w-0">
-          <div className="flex gap-3 min-w-max">
-            {/* Owned column */}
-            <div className="w-[80px] shrink-0">
-              <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CITATION_COLORS.owned }} />
-                <span className="text-figma-2xs font-medium text-figma-secondary">Owned</span>
-                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                  {isEmpty ? '—' : (data?.sources?.owned.percentage ?? '—')}%
-                </span>
-              </div>
-              <div className="space-y-0.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                    {data?.sources?.owned.sites[i] || '—'}
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            {/* Third-party column */}
-            <div className="w-[80px] shrink-0">
-              <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CITATION_COLORS.thirdParty }} />
-                <span className="text-figma-2xs font-medium text-figma-secondary">3rd party</span>
-                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                  {isEmpty ? '—' : (data?.sources?.thirdParty.percentage ?? '—')}%
-                </span>
-              </div>
-              <div className="space-y-0.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                    {data?.sources?.thirdParty.sites[i] || '—'}
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            {/* Social column (scroll to reveal) */}
-            <div className="w-[80px] shrink-0">
-              <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CITATION_COLORS.social }} />
-                <span className="text-figma-2xs font-medium text-figma-secondary">Social</span>
-                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                  {isEmpty ? '—' : (data?.sources?.social.percentage ?? '—')}%
-                </span>
-              </div>
-              <div className="space-y-0.5">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                    {data?.sources?.social.sites[i] || '—'}
-                  </p>
-                ))}
-              </div>
+        <div className="flex flex-1 min-w-0 flex-col">
+          <div className="overflow-x-auto scrollbar-hover">
+            <div className="flex min-w-max gap-3">
+              {sourceGroups.map((source) => (
+                <div key={source.label} className="w-[80px] shrink-0 flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
+                  <span className="text-figma-2xs font-medium text-figma-secondary">{source.label}</span>
+                  <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
+                    {isEmpty || noPeriodData ? '—' : (source.percentage ?? '—')}%
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
+          {noPeriodData ? (
+            <PeriodEmpty className="min-h-[100px] flex-1" />
+          ) : (
+            <div className="overflow-x-auto scrollbar-hover">
+              <div className="flex gap-3">
+                {sourceGroups.map((source) => (
+                  <div key={source.label} className="w-[80px] shrink-0 space-y-0.5">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <p key={index} className="text-figma-2xs text-figma-muted truncate">
+                        {source.sites[index] || '—'}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </MetricCard>
@@ -844,9 +863,10 @@ export function CitationRateCompetitorCard({ data, isLoading }: CitationRateCard
 interface CompetitivePressureCardProps {
   data: CompetitivePressureData | null;
   isLoading?: boolean;
+  noPeriodData?: boolean;
 }
 
-export function CompetitivePressureCard({ data, isLoading }: CompetitivePressureCardProps) {
+export function CompetitivePressureCard({ data, isLoading, noPeriodData = false }: CompetitivePressureCardProps) {
   // Empty state: no data OR no competitors to compare against
   const hasRealCompetitors = data?.competitors && data.competitors.length > 0;
   const isEmpty = !data || !hasRealCompetitors;
@@ -859,14 +879,16 @@ export function CompetitivePressureCard({ data, isLoading }: CompetitivePressure
         <Skeleton className="h-4 w-36 rounded" />
         <Skeleton className="h-8 w-20 mt-2 mb-1 rounded" />
         <Skeleton className="h-3 w-32 rounded" />
-        <CardDivider className="mt-5 mb-3" />
-        <div className="flex-1 overflow-y-auto scrollbar-none">
-          {/* Column headers */}
-          <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
+        <CardDivider className="mt-5 mb-1.5" />
+        <MetricListScroller
+          header={
+            <div className="flex items-center gap-2">
             <Skeleton className="h-2.5 flex-1 rounded" />
             <Skeleton className="h-2.5 w-10 rounded" />
             <Skeleton className="h-2.5 w-6 rounded" />
-          </div>
+            </div>
+          }
+        >
           {/* 4 competitor rows */}
           <div className="space-y-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -878,7 +900,7 @@ export function CompetitivePressureCard({ data, isLoading }: CompetitivePressure
               </div>
             ))}
           </div>
-        </div>
+        </MetricListScroller>
       </MetricCard>
     );
   }
@@ -890,13 +912,13 @@ export function CompetitivePressureCard({ data, isLoading }: CompetitivePressure
         <InfoTooltip content="Net position changes vs competitors: takeovers (wins) minus losses" />
       </div>
 
-      {isEmpty ? (
+      {noPeriodData || isEmpty ? (
         <>
           <div className="h-[38px] flex items-baseline gap-2 mt-2 mb-1">
-            <span className="text-figma-lg font-bold text-figma-primary">0</span>
+            <span className="text-figma-lg font-bold text-figma-primary">{noPeriodData ? '—' : '0'}</span>
             <span className="text-figma-base text-figma-secondary">net wins</span>
           </div>
-          <CardSubtitle>0 takeovers · 0 losses</CardSubtitle>
+          <CardSubtitle>{noPeriodData ? '— takeovers · — losses' : '0 takeovers · 0 losses'}</CardSubtitle>
         </>
       ) : (
         <>
@@ -915,19 +937,19 @@ export function CompetitivePressureCard({ data, isLoading }: CompetitivePressure
         </>
       )}
 
-      <CardDivider className="mt-5 mb-3" />
+      <CardDivider className="mt-5 mb-1.5" />
 
       {/* Competitor table with column headers */}
-      <div className="flex-1 overflow-y-auto scrollbar-none">
-        {/* Column headers */}
-        <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-          <span className="text-figma-2xs font-medium text-figma-muted flex-1">Competitor</span>
-          <span className="text-figma-2xs font-medium text-figma-muted w-10 text-center">Net</span>
-          <span className="text-figma-2xs font-medium text-figma-muted w-6 text-right">Δ</span>
-        </div>
-
-        {/* Competitor rows */}
-        <div className="space-y-1.5">
+      <MetricListScroller
+        header={
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-figma-2xs font-medium text-figma-muted">Competitor</span>
+            <span className="w-10 text-center text-figma-2xs font-medium text-figma-muted">Net</span>
+            <span className="w-6 text-right text-figma-2xs font-medium text-figma-muted">Δ</span>
+          </div>
+        }
+      >
+        {noPeriodData ? <PeriodEmpty /> : <div className="space-y-1.5">
           {(data?.competitors?.length ? data.competitors : [
             { name: 'Competitor 1', delta: 0 },
             { name: 'Competitor 2', delta: 0 },
@@ -995,8 +1017,8 @@ export function CompetitivePressureCard({ data, isLoading }: CompetitivePressure
               </span>
             </div>
           ))}
-        </div>
-      </div>
+        </div>}
+      </MetricListScroller>
     </MetricCard>
   );
 }

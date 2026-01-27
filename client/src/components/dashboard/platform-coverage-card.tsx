@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ContentCard, SENTIMENT_COLORS } from '@/components/shared';
+import { CardEmptyState } from '@/components/shared/empty-state';
+import { Search } from 'lucide-react';
 import { PlatformIcon, PLATFORMS, getPlatformInfo } from '@/components/ui/platform-icon';
 import {
     Tooltip,
@@ -30,6 +32,8 @@ interface PlatformCoverageCardProps {
     subtitle?: string;
     onClick?: () => void;
     onPlatformClick?: (id: string) => void;
+    noPeriodData?: boolean;
+    onAdjustDateRange?: () => void;
     className?: string;
 }
 
@@ -39,6 +43,8 @@ export function PlatformCoverageCard({
     subtitle,
     onClick,
     onPlatformClick,
+    noPeriodData,
+    onAdjustDateRange,
     className,
 }: PlatformCoverageCardProps) {
     const hasData = platforms.length > 0;
@@ -60,7 +66,15 @@ export function PlatformCoverageCard({
             contentClassName="flex-1 pt-5 px-5 pb-4 overflow-hidden"
             className={className}
         >
-            <TooltipProvider delayDuration={0}>
+            {noPeriodData ? (
+                <CardEmptyState
+                    icon={Search}
+                    title="No results in this period"
+                    description="Change the date range to view results from another period."
+                    action={onAdjustDateRange ? { label: 'Adjust date filter', onClick: onAdjustDateRange } : undefined}
+                    className="min-h-[280px]"
+                />
+            ) : <TooltipProvider delayDuration={0}>
                 <div className="max-h-[240px] overflow-y-auto scrollbar-none space-y-6 pr-1">
                     {hasData ? (
                         // Real data
@@ -179,7 +193,7 @@ export function PlatformCoverageCard({
                         ))
                     )}
                 </div>
-            </TooltipProvider>
+            </TooltipProvider>}
         </ContentCard>
     );
 }

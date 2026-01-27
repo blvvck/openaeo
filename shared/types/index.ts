@@ -38,3 +38,6 @@ export * from './citations';
 
 // Site Health
 export * from './site-health';
+
+// Global search
+export * from './search';

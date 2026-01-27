@@ -1,6 +1,8 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { ContentCard, SENTIMENT_COLORS } from '@/components/shared';
+import { CardEmptyState } from '@/components/shared/empty-state';
 import { PlatformIcon } from '@/components/ui/platform-icon';
+import { Search } from 'lucide-react';
 
 interface SentimentSignalCardProps {
     /** Trend percentage change */
@@ -23,6 +25,8 @@ interface SentimentSignalCardProps {
     subtitle?: string;
     /** Click handler for "View all" */
     onClick?: () => void;
+    noPeriodData?: boolean;
+    onAdjustDateRange?: () => void;
     /** Additional classes */
     className?: string;
 }
@@ -43,6 +47,8 @@ export function SentimentSignalCard({
     platformSentiment,
     subtitle,
     onClick,
+    noPeriodData,
+    onAdjustDateRange,
     className,
 }: SentimentSignalCardProps) {
     const data = [
@@ -65,6 +71,15 @@ export function SentimentSignalCard({
             contentClassName="flex-1 flex flex-col pt-4 px-5 pb-3"
             className={className}
         >
+            {noPeriodData ? (
+                <CardEmptyState
+                    icon={Search}
+                    title="No results in this period"
+                    description="Change the date range to view results from another period."
+                    action={onAdjustDateRange ? { label: 'Adjust date filter', onClick: onAdjustDateRange } : undefined}
+                    className="min-h-[280px]"
+                />
+            ) : <>
             {/* Donut + Three-column sentiment breakdown */}
             <div className="flex items-start gap-5 pl-2">
                 {/* Donut Chart with Center Text */}
@@ -190,6 +205,7 @@ export function SentimentSignalCard({
                     </div>
                 </div>
             </div>
+            </>}
         </ContentCard>
     );
 }

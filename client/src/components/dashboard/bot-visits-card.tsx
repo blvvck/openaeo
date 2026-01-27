@@ -22,6 +22,7 @@ interface BotVisitsCardProps {
     }[];
     onClick?: () => void;
     className?: string;
+    noPeriodData?: boolean;
 }
 
 /**
@@ -35,6 +36,7 @@ export function BotVisitsCard({
     bots,
     onClick,
     className,
+    noPeriodData = false,
 }: BotVisitsCardProps) {
     return (
         <MetricCard onClick={onClick} className={className}>
@@ -55,40 +57,45 @@ export function BotVisitsCard({
                 </TooltipProvider>
             </div>
 
-            <StatMetric value={total} trend={trend} />
+            <StatMetric value={noPeriodData ? '—' : total} trend={trend} />
 
             <CardSubtitle>{period}</CardSubtitle>
 
             <CardDivider />
 
             {/* Bot Rows - vertical scroll for overflow */}
-            <div className="max-h-[100px] overflow-y-auto scrollbar-none space-y-3">
-                {bots.length > 0 ? (
-                    bots.map((bot) => (
-                        <PlatformRow
-                            key={bot.id}
-                            platformId={bot.id}
-                            name={bot.name}
-                            iconSize="sm"
-                            value={`${bot.percentage}%`}
-                            secondaryValue={bot.count}
-                        />
-                    ))
-                ) : (
-                    // Empty state - show platforms with "—" values
-                    PLATFORMS.slice(0, 5).map((p) => (
-                        <PlatformRow
-                            key={p.id}
-                            platformId={p.id}
-                            name={p.name}
-                            iconSize="sm"
-                            value="—%"
-                            secondaryValue="—"
-                            muted
-                        />
-                    ))
-                )}
-            </div>
+            {noPeriodData ? (
+                <div className="flex min-h-[100px] items-center justify-center px-2 text-center text-figma-2xs text-figma-muted">
+                    No results in this period
+                </div>
+            ) : (
+                <div className="max-h-[100px] overflow-y-auto scrollbar-none space-y-3">
+                    {bots.length > 0 ? (
+                        bots.map((bot) => (
+                            <PlatformRow
+                                key={bot.id}
+                                platformId={bot.id}
+                                name={bot.name}
+                                iconSize="sm"
+                                value={`${bot.percentage}%`}
+                                secondaryValue={bot.count}
+                            />
+                        ))
+                    ) : (
+                        PLATFORMS.slice(0, 5).map((p) => (
+                            <PlatformRow
+                                key={p.id}
+                                platformId={p.id}
+                                name={p.name}
+                                iconSize="sm"
+                                value="—%"
+                                secondaryValue="—"
+                                muted
+                            />
+                        ))
+                    )}
+                </div>
+            )}
         </MetricCard>
     );
 }

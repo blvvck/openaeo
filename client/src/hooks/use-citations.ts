@@ -11,6 +11,7 @@
  */
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { workspaceFetch } from '@/lib/workspace-query';
 import type {
   CitationsOverviewResponse,
   CitationsListResponse,
@@ -269,9 +270,9 @@ export function useCitationsOverview(timeRange: TimeRangePreset) {
   return useQuery<CitationsOverviewResponse>({
     queryKey: ['citations', 'overview', timeRange],
     queryFn: async () => {
-      // TODO: Wire to GET /api/citations/overview when ready
-      await new Promise(r => setTimeout(r, 400));
-      return generateMockOverview();
+      const res = await workspaceFetch(`/api/citations/overview?timeRange=${timeRange}`);
+      if (!res.ok) throw new Error('Failed to load citations overview');
+      return res.json();
     },
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -298,9 +299,17 @@ export function useCitations(params: {
   return useQuery<CitationsListResponse>({
     queryKey: ['citations', 'list', timeRange, type, platform, sentiment, search, limit, offset, sortBy, sortDir],
     queryFn: async () => {
-      // TODO: Wire to GET /api/citations when ready
-      await new Promise(r => setTimeout(r, 300));
-      return generateMockCitations({ type, platform, sentiment, search, limit, offset });
+      const params = new URLSearchParams({ timeRange, limit: String(limit), offset: String(offset) });
+      if (type) params.set('type', type);
+      if (platform) params.set('platform', platform);
+      if (sentiment) params.set('sentiment', sentiment);
+      if (search) params.set('search', search);
+      if (sortBy) params.set('sortBy', sortBy);
+      if (sortDir) params.set('sortDir', sortDir);
+
+      const res = await workspaceFetch(`/api/citations?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load citations');
+      return res.json();
     },
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
@@ -317,9 +326,9 @@ export function useCitationDetail(citationId: string | null) {
     queryFn: async () => {
       if (!citationId) throw new Error('No citation selected');
 
-      // TODO: Wire to GET /api/citations/:id when ready
-      await new Promise(r => setTimeout(r, 300));
-      return generateMockCitationDetail(citationId);
+      const res = await workspaceFetch(`/api/citations/${encodeURIComponent(citationId)}`);
+      if (!res.ok) throw new Error('Failed to load citation detail');
+      return res.json();
     },
     enabled: !!citationId,
     staleTime: 5 * 60 * 1000,

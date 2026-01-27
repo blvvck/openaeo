@@ -81,7 +81,7 @@ export function EnterUrlStep({
     <div className="max-w-md mx-auto">
       <div className="border border-figma-border rounded-xl bg-figma-card p-8">
         {/* Title */}
-        <h2 className="text-h2 font-semibold text-figma-primary text-center">
+        <h2 className="text-h3 font-semibold text-figma-primary text-center">
           Analyze a competitor
         </h2>
         <p className="text-figma-sm text-figma-secondary text-center mt-2">
@@ -138,7 +138,7 @@ export function EnterUrlStep({
         {/* Recent Searches */}
         {recentSearches.length > 0 && !isLoading && (
           <div className="mt-8 pt-6 border-t border-figma-border-light">
-            <h4 className="text-figma-2xs font-medium text-figma-secondary uppercase mb-3">
+            <h4 className="text-figma-2xs font-medium text-figma-secondary mb-3">
               Recent searches
             </h4>
             <div className="space-y-2">

@@ -13,6 +13,7 @@ export interface AccessibleWorkspace {
   name: string;
   slug: string;
   role: string;
+  onboarding_completed_at: string | null;
 }
 
 export interface WorkspaceListResponse {
@@ -112,8 +113,8 @@ export const workspaceQueryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: createWorkspaceQuery("throw"),
-      staleTime: 20_000,
-      refetchOnWindowFocus: true,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
       retry: 1,
     },
     mutations: { retry: false },

@@ -65,6 +65,8 @@ export interface TrafficSummary {
   period: {
     from: Date;
     to: Date;
+    hasHistoricalData: boolean;
+    hasDataInRange: boolean;
   };
 }
 
@@ -177,10 +179,14 @@ export async function getBotStats(
   const to = toDate || now;
 
   // Get all visits in the period
-  const rawVisits = await prisma.bot_visits.findMany({
-    where: { workspace_id: requireWorkspaceId(), visited_at: { gte: from, lte: to } },
-    orderBy: { visited_at: "desc" },
-  });
+  const workspaceId = requireWorkspaceId();
+  const [rawVisits, historicalVisitCount] = await Promise.all([
+    prisma.bot_visits.findMany({
+      where: { workspace_id: workspaceId, visited_at: { gte: from, lte: to } },
+      orderBy: { visited_at: "desc" },
+    }),
+    prisma.bot_visits.count({ where: { workspace_id: workspaceId } }),
+  ]);
   const visits = rawVisits.map((row) => fromPrismaRow<BotVisit>(row as unknown as Record<string, unknown>));
 
   // Aggregate by bot type
@@ -250,7 +256,12 @@ export async function getBotStats(
     socialVisits,
     otherVisits,
     byBot,
-    period: { from, to },
+    period: {
+      from,
+      to,
+      hasHistoricalData: historicalVisitCount > 0,
+      hasDataInRange: visits.length > 0,
+    },
   };
 }
 

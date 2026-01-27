@@ -135,17 +135,17 @@ function formatTrend(trend: number): string {
 
 function MiniTableHeader() {
   return (
-    <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-figma-border-light bg-figma-hover rounded-t-lg">
-      <div className="col-span-5 text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide">
+    <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-figma-border-light">
+      <div className="col-span-5 text-figma-2xs font-medium text-figma-secondary tracking-wide">
         Topic
       </div>
-      <div className="col-span-2 text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide text-right">
+      <div className="col-span-2 text-figma-2xs font-medium text-figma-secondary tracking-wide text-right">
         Mentions
       </div>
-      <div className="col-span-2 text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide text-right">
+      <div className="col-span-2 text-figma-2xs font-medium text-figma-secondary tracking-wide text-right">
         Position
       </div>
-      <div className="col-span-3 text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide text-right">
+      <div className="col-span-3 text-figma-2xs font-medium text-figma-secondary tracking-wide text-right">
         Trend
       </div>
     </div>
@@ -307,7 +307,7 @@ function TopicCard({
         <div className="h-px bg-figma-border-light mx-4" />
 
         {/* Table */}
-        <div className="flex-1 overflow-y-auto px-3 pt-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pt-0">
           <TooltipProvider>
             {isLoading ? (
               <div className="flex items-center justify-center py-12">

@@ -23,6 +23,8 @@ import { getSimpleSentiment } from '../services/analytics/sentiment-analyzer';
 import { getSimplePositionScore } from '../services/analytics/position-scorer';
 import { extractCitations } from '../services/analytics/citation-tracker';
 import { getClient, getAvailableClients, hasApiAccess } from '../services/platforms/api-clients';
+import { storage } from '../data';
+import { countDuePromptRuns, getPromptFrequency, scheduleDuePromptRun } from '../services/prompts/prompt-tracking';
 import type { PlatformName, PlatformResponse } from '../services/platforms/types';
 import type {
   H2HMetrics,
@@ -52,6 +54,37 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o';
 
 // Supported platforms for H2H analysis
 const PLATFORMS = ['chatgpt', 'claude', 'perplexity', 'gemini', 'grok', 'deepseek'] as const;
+
+function normalizePromptText(text: string): string {
+  return text.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function mapJourneyStage(stage?: JourneyStage): string | undefined {
+  if (!stage) return undefined;
+  const stageMap: Record<JourneyStage, string> = {
+    problem_aware: 'problem-aware',
+    exploring: 'solution-seeking',
+    comparing_tradeoffs: 'comparing',
+    deciding: 'buying',
+    onboarding: 'using',
+    power_user: 'using',
+  };
+  return stageMap[stage];
+}
+
+const trackedPromptInput = z.object({
+  prompts: z.array(z.object({
+    text: z.string().trim().min(1).max(500),
+    stage: z.enum([
+      'problem_aware',
+      'exploring',
+      'comparing_tradeoffs',
+      'deciding',
+      'onboarding',
+      'power_user',
+    ]),
+  })).min(1).max(100),
+});
 
 // =============================================================================
 // H2H Metrics Computation
@@ -938,6 +971,58 @@ Return only valid JSON array.`
   }
 });
 
+router.post('/prompts/track', async (req: Request, res: Response) => {
+  const parsed = trackedPromptInput.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Provide 1 to 100 valid prompts to track' });
+  }
+
+  try {
+    const existingPrompts = await storage.getPrompts();
+    const promptsByText = new Map(
+      existingPrompts
+        .filter(prompt => !prompt.archivedAt && prompt.text.trim())
+        .map(prompt => [normalizePromptText(prompt.text), prompt]),
+    );
+    const submittedKeys = new Set<string>();
+    const addedPromptIds: number[] = [];
+    let addedCount = 0;
+    let alreadyTrackedCount = 0;
+
+    for (const customerPrompt of parsed.data.prompts) {
+      const text = customerPrompt.text.trim();
+      const key = normalizePromptText(text);
+      if (submittedKeys.has(key)) continue;
+      submittedKeys.add(key);
+
+      if (promptsByText.has(key)) {
+        alreadyTrackedCount++;
+        continue;
+      }
+
+      const journeyStage = mapJourneyStage(customerPrompt.stage);
+      const prompt = await storage.createPrompt({
+        text,
+        journeyStages: journeyStage ? [journeyStage] : undefined,
+      });
+      promptsByText.set(key, prompt);
+      addedPromptIds.push(prompt.id);
+      addedCount++;
+    }
+
+    const workspaceId = currentWorkspaceId();
+    if (addedPromptIds.length && workspaceId) {
+      await getPromptFrequency();
+    }
+    const queuedPrompts = workspaceId ? await countDuePromptRuns(addedPromptIds) : 0;
+    res.json({ addedCount, alreadyTrackedCount, queuedPrompts });
+    if (workspaceId && queuedPrompts) scheduleDuePromptRun(workspaceId, addedPromptIds);
+  } catch (error) {
+    console.error('[Intelligence/prompts/track] Error:', error);
+    res.status(500).json({ error: 'Failed to add prompts to tracking' });
+  }
+});
+
 /**
  * POST /api/intelligence/research
  * Step 5: Run full research across platforms — THE BIG ONE
@@ -1009,7 +1094,6 @@ router.post('/research', async (req: Request, res: Response) => {
       // Delay between prompts to avoid overwhelming APIs
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-
 
     // Compute platform results
     const platformResults: PlatformResult[] = platformsToQuery.map(platformId => {

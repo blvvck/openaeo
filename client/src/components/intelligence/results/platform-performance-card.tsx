@@ -117,7 +117,7 @@ export function PlatformPerformanceCard({
               {/* Comparison table */}
               <div className="space-y-0">
                 {/* Header row */}
-                <div className="grid grid-cols-[1fr_80px_80px] gap-2 pb-2 text-figma-2xs font-medium uppercase tracking-wider">
+                <div className="grid grid-cols-[1fr_80px_80px] gap-2 pb-2 text-figma-2xs font-medium tracking-wider">
                   <div></div>
                   <div className="text-center truncate text-figma-muted">{targetName}</div>
                   <div className="text-center truncate text-figma-blue">{yourName} (You)</div>

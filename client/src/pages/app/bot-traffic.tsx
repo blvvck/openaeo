@@ -56,14 +56,15 @@ import {
   SelectValue,
 } from '@/components/ui/option-picker';
 import { Input } from '@/components/ui/input';
+import { FilterSearch, FilterSelect } from '@/components/shared/filter-bar';
+import { MetricListScroller } from '@/components/shared/stat-metric';
 import {
   TimeRangeSelector,
   useTimeRange,
   getPeriodLabel,
   type TimeRange,
 } from '@/components/charts/time-range-selector';
-import { ErrorState } from '@/components/shared/empty-state';
-import { EmptyState } from '@/components/shared/empty-state';
+import { CardEmptyState, ErrorState } from '@/components/shared/empty-state';
 import {
   Tooltip,
   TooltipContent,
@@ -118,6 +119,8 @@ interface TrafficSummary {
   period: {
     from: string;
     to: string;
+    hasHistoricalData: boolean;
+    hasDataInRange: boolean;
   };
   isDemo?: boolean;
 }
@@ -337,28 +340,28 @@ function getBotCategory(botType: string): 'ai' | 'search' | 'social' | 'other' {
 
 // Demo visit counts keyed by bot ID
 const DEMO_AI_VISITS: Record<string, { visits: number; pages: number }> = {
-  'GPTBot': { visits: 1203, pages: 47 },
-  'ChatGPT-User': { visits: 523, pages: 31 },
-  'ClaudeBot': { visits: 847, pages: 38 },
-  'PerplexityBot': { visits: 412, pages: 29 },
-  'Google-Extended': { visits: 285, pages: 24 },
-  'Cohere-ai': { visits: 156, pages: 21 },
-  'CCBot': { visits: 100, pages: 18 },
+  [AI_BOTS[0].id]: { visits: 1203, pages: 47 },
+  [AI_BOTS[1].id]: { visits: 523, pages: 31 },
+  [AI_BOTS[2].id]: { visits: 847, pages: 38 },
+  [AI_BOTS[3].id]: { visits: 412, pages: 29 },
+  [AI_BOTS[4].id]: { visits: 285, pages: 24 },
+  [AI_BOTS[5].id]: { visits: 156, pages: 21 },
+  [AI_BOTS[6].id]: { visits: 100, pages: 18 },
 };
 
 const DEMO_SEARCH_VISITS: Record<string, { visits: number; pages: number }> = {
-  'Googlebot': { visits: 4521, pages: 156 },
-  'Bingbot': { visits: 1834, pages: 89 },
-  'DuckDuckBot': { visits: 423, pages: 34 },
-  'YandexBot': { visits: 287, pages: 28 },
-  'Baiduspider': { visits: 156, pages: 19 },
+  [SEARCH_BOTS[0].id]: { visits: 4521, pages: 156 },
+  [SEARCH_BOTS[1].id]: { visits: 1834, pages: 89 },
+  [SEARCH_BOTS[2].id]: { visits: 423, pages: 34 },
+  [SEARCH_BOTS[3].id]: { visits: 287, pages: 28 },
+  [SEARCH_BOTS[4].id]: { visits: 156, pages: 19 },
 };
 
 const DEMO_SOCIAL_VISITS: Record<string, { visits: number; pages: number }> = {
-  'Twitterbot': { visits: 892, pages: 45 },
-  'facebookexternalhit': { visits: 634, pages: 38 },
-  'LinkedInBot': { visits: 312, pages: 24 },
-  'Slackbot': { visits: 178, pages: 16 },
+  [SOCIAL_BOTS[0].id]: { visits: 892, pages: 45 },
+  [SOCIAL_BOTS[1].id]: { visits: 634, pages: 38 },
+  [SOCIAL_BOTS[2].id]: { visits: 312, pages: 24 },
+  [SOCIAL_BOTS[3].id]: { visits: 178, pages: 16 },
 };
 
 const SEEDED_TOP_PAGES: TopCrawledPage[] = [
@@ -394,22 +397,77 @@ import type {
   SiteHealthAudit,
   SiteHealthAuditResponse,
   SiteHealthStatusResponse,
+  SiteHealthAction,
   HealthCheck as SHHealthCheck,
   Recommendation as SHRecommendation,
 } from '@shared/types/site-health';
+
+const MOCK_SITE_HEALTH_AT = new Date().toISOString();
+const MOCK_COPY_FEEDBACK = {
+  llms: {
+    title: 'Starter llms.txt copied',
+    description: 'Paste it into /llms.txt at example.com’s domain root, customize the page links, publish it, then rerun the audit.',
+  },
+  robots: {
+    title: 'AI crawler rules copied',
+    description: 'Add these rules to example.com’s robots.txt, check for conflicting Disallow rules, publish the file, then rerun the audit.',
+  },
+  schema: {
+    title: 'Organization schema copied',
+    description: 'Replace the example name and URL, add the JSON-LD to the homepage head, publish the page, then rerun the audit.',
+  },
+};
+const MOCK_SITE_HEALTH_AUDIT: SiteHealthAudit = {
+  domain: 'example.com',
+  summary: {
+    llmsTxt: 'issue',
+    robotsTxt: 'warning',
+    sitemap: 'good',
+    schema: 'issue',
+    pageMeta: 'good',
+    lastAuditAt: MOCK_SITE_HEALTH_AT,
+  },
+  checks: [
+    { id: 'llms-txt-present', name: 'llms.txt present', category: 'llms', status: 'fail', details: 'File not found at /llms.txt', action: { label: 'Copy starter', type: 'copy', value: '# example.com\n\n> Official website for example.com.\n\n## Core pages\n- [Home](https://example.com): Main website\n', copyFeedback: MOCK_COPY_FEEDBACK.llms } },
+    { id: 'robots-txt-exists', name: 'robots.txt available', category: 'robots', status: 'pass', details: 'Found at /robots.txt' },
+    { id: 'robots-txt-ai-bots', name: 'AI crawlers allowed', category: 'robots', status: 'warn', details: '2 of 7 blocked', action: { label: 'Fix', type: 'copy', value: 'User-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n', copyFeedback: MOCK_COPY_FEEDBACK.robots } },
+    { id: 'sitemap-present', name: 'Sitemap available', category: 'sitemap', status: 'pass', details: 'Found at /sitemap.xml', action: { label: 'View', type: 'link', value: 'https://example.com/sitemap.xml' } },
+    { id: 'sitemap-lastmod', name: 'Last modified dates', category: 'sitemap', status: 'pass', details: 'Present on 42 URLs' },
+    { id: 'schema-organization', name: 'Organization schema', category: 'schema', status: 'fail', details: 'Not found on homepage', action: { label: 'Add', type: 'copy', value: '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Example Company",\n  "url": "https://example.com"\n}', copyFeedback: MOCK_COPY_FEEDBACK.schema } },
+    { id: 'schema-faq', name: 'FAQ schema', category: 'schema', status: 'warn', details: 'Not found on sampled pages' },
+    { id: 'meta-description', name: 'Meta description', category: 'other', status: 'pass', details: 'Present on the homepage' },
+    { id: 'open-graph-tags', name: 'Open Graph tags', category: 'other', status: 'pass', details: 'Title, description, and image are present' },
+  ],
+  recommendations: [
+    { id: 'add-organization-schema', priority: 1, title: 'Add Organization schema markup', description: 'AI systems use this to verify your brand identity.', impact: 'high', actions: [{ label: 'View guide', type: 'link', value: 'https://schema.org/Organization' }, { label: 'Copy snippet', type: 'copy', value: '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Example Company",\n  "url": "https://example.com"\n}', copyFeedback: MOCK_COPY_FEEDBACK.schema }] },
+    { id: 'unblock-ai-bots', priority: 2, title: 'Unblock AI crawlers in robots.txt', description: 'Allowing these crawlers helps AI platforms access your public pages.', impact: 'high', actions: [{ label: 'View robots.txt', type: 'link', value: 'https://example.com/robots.txt' }, { label: 'Copy fix', type: 'copy', value: 'User-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n', copyFeedback: MOCK_COPY_FEEDBACK.robots }] },
+    { id: 'add-llms-txt', priority: 3, title: 'Add an llms.txt file', description: 'Help AI systems understand your site structure and priorities.', impact: 'medium', actions: [{ label: 'View guide', type: 'link', value: 'https://llmstxt.org' }, { label: 'Copy starter', type: 'copy', value: '# example.com\n\n> Official website for example.com.\n\n## Core pages\n- [Home](https://example.com): Main website\n', copyFeedback: MOCK_COPY_FEEDBACK.llms }] },
+    { id: 'add-faq-schema', priority: 4, title: 'Add FAQ schema to key pages', description: 'Structured answers can help AI systems identify and cite your support content.', impact: 'medium', actions: [] },
+  ],
+  auditedAt: MOCK_SITE_HEALTH_AT,
+};
 
 // ============================================================================
 // Site Health Hook
 // ============================================================================
 
 function useSiteHealth() {
-  const [audit, setAudit] = useState<SiteHealthAudit | null>(null);
+  const isMockPreview = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('mockSiteHealth') === '1';
+  const [audit, setAudit] = useState<SiteHealthAudit | null>(
+    isMockPreview ? MOCK_SITE_HEALTH_AUDIT : null
+  );
   const [isAuditing, setIsAuditing] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(!isMockPreview);
   const { toast } = useToast();
 
-  // Check for cached audit on mount
   useEffect(() => {
+    if (isMockPreview) {
+      setAudit(MOCK_SITE_HEALTH_AUDIT);
+      setInitialLoading(false);
+      return;
+    }
+
     fetch('/api/site-health/status')
       .then(res => res.json())
       .then((data: SiteHealthStatusResponse) => {
@@ -421,9 +479,14 @@ function useSiteHealth() {
         // No cached audit, that's fine
       })
       .finally(() => setInitialLoading(false));
-  }, []);
+  }, [isMockPreview]);
 
   const runAudit = async () => {
+    if (isMockPreview) {
+      setAudit(MOCK_SITE_HEALTH_AUDIT);
+      return;
+    }
+
     setIsAuditing(true);
     try {
       const res = await fetch('/api/site-health/audit', {
@@ -462,6 +525,26 @@ function PageSpinner() {
     <div className="flex items-center justify-center py-32">
       <Loader2 className="w-8 h-8 animate-spin text-figma-muted" />
     </div>
+  );
+}
+
+function NoPeriodRows() {
+  return (
+    <div className="flex h-full min-h-[100px] items-center justify-center text-center text-figma-2xs text-figma-muted">
+      No results in this period
+    </div>
+  );
+}
+
+function NoPeriodState({ onAdjustDateRange }: { onAdjustDateRange: () => void }) {
+  return (
+    <CardEmptyState
+      icon={Search}
+      title="No results in this period"
+      description="Change the date range to view results from another period."
+      action={{ label: 'Adjust date filter', onClick: onAdjustDateRange }}
+      className="min-h-[260px]"
+    />
   );
 }
 
@@ -556,11 +639,24 @@ const getCheckIcon = (status: CheckStatus) => {
 };
 
 // Handle check action (link opens URL, copy writes to clipboard)
-function handleCheckAction(action: { label: string; type: string; value: string }) {
+async function handleCheckAction(
+  action: SiteHealthAction,
+  toast: ReturnType<typeof useToast>['toast'],
+) {
   if (action.type === 'link') {
-    window.open(action.value.startsWith('http') ? action.value : `https://${action.value}`, '_blank');
+    window.open(action.value.startsWith('http') ? action.value : `https://${action.value}`, '_blank', 'noopener,noreferrer');
   } else if (action.type === 'copy') {
-    navigator.clipboard.writeText(action.value);
+    if (!navigator.clipboard?.writeText) {
+      toast({ title: 'Could not copy', description: 'Clipboard access is unavailable in this browser.', variant: 'warning' });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(action.value);
+      toast(action.copyFeedback);
+    } catch {
+      toast({ title: 'Could not copy', description: 'Your browser did not allow clipboard access.', variant: 'warning' });
+    }
   }
 }
 
@@ -574,26 +670,6 @@ const AUDIT_STEPS = [
   'Compiling recommendations...',
 ];
 
-function AuditProgressIndicator() {
-  const [stepIndex, setStepIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStepIndex(prev => (prev + 1) % AUDIT_STEPS.length);
-    }, 2200);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="text-center py-12">
-      <Loader2 className="w-8 h-8 text-figma-blue mx-auto mb-4 animate-spin" />
-      <p className="text-figma-sm text-figma-secondary transition-opacity duration-300">
-        {AUDIT_STEPS[stepIndex]}
-      </p>
-    </div>
-  );
-}
-
 interface SiteHealthSectionProps {
   audit: SiteHealthAudit | null;
   isAuditing: boolean;
@@ -602,6 +678,21 @@ interface SiteHealthSectionProps {
 }
 
 function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: SiteHealthSectionProps) {
+  const { toast } = useToast();
+  const [auditStepIndex, setAuditStepIndex] = useState(0);
+
+  useEffect(() => {
+    if (!isAuditing) {
+      setAuditStepIndex(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setAuditStepIndex(index => (index + 1) % AUDIT_STEPS.length);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, [isAuditing]);
+
   // Initial loading — skeleton
   if (initialLoading) {
     return (
@@ -622,20 +713,24 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
     );
   }
 
-  // Audit in progress — rotate through check descriptions
-  if (isAuditing) {
-    return <AuditProgressIndicator />;
-  }
-
   // No audit run yet — empty state
   if (!audit) {
     return (
-      <EmptyState
-        icon={SearchCheck}
-        title="How visible are you to AI?"
-        description="Check your llms.txt, robots.txt, sitemap, and schema markup to see how AI crawlers find and understand your content."
-        primaryAction={{ label: 'Run audit', onClick: onRunAudit }}
-      />
+      <div className="flex min-h-[45vh] items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-xl border border-figma-border bg-figma-card p-8">
+          <SearchCheck className="mx-auto mb-3 h-8 w-8 text-figma-muted" aria-hidden="true" />
+          <h2 className="text-h3 text-center font-semibold text-figma-primary">
+            See how AI crawlers read your site
+          </h2>
+          <p className="mt-2 text-center text-figma-sm text-figma-secondary">
+            Check your llms.txt, robots.txt, sitemap, and schema markup to see how AI crawlers find and understand your content.
+          </p>
+          <Button onClick={onRunAudit} disabled={isAuditing} className="mt-8 w-full">
+            {isAuditing && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isAuditing ? AUDIT_STEPS[auditStepIndex] : 'Run audit'}
+          </Button>
+        </div>
+      </div>
     );
   }
 
@@ -754,19 +849,19 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
         subtitle="Detailed check results"
       >
         <TableHeader
-          gridCols="grid-cols-[1fr_80px_1fr_80px]"
+          gridCols="grid-cols-[minmax(0,0.7fr)_80px_minmax(0,1.3fr)_80px]"
           columns={[
-            { label: 'CHECK' },
-            { label: 'STATUS' },
-            { label: 'DETAILS' },
-            { label: 'ACTION', align: 'right' },
+            { label: 'Check' },
+            { label: 'Status' },
+            { label: 'Details' },
+            { label: 'Action', align: 'right' },
           ]}
         />
         <div className="space-y-0">
           {checks.map(check => (
             <div
               key={check.id}
-              className="grid grid-cols-[1fr_80px_1fr_80px] gap-3 items-center py-3 px-2 border-b border-figma-border-light last:border-0"
+              className="grid grid-cols-[minmax(0,0.7fr)_80px_minmax(0,1.3fr)_80px] gap-3 items-center py-3 px-2 border-b border-figma-border-light last:border-0"
             >
               <span className="text-figma-sm text-figma-primary">{check.name}</span>
               <div className="flex justify-center">
@@ -774,14 +869,14 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
               </div>
               <span className="text-figma-sm text-figma-secondary truncate">{check.details}</span>
               <div className="flex justify-end">
-                {check.action && (
+                {check.action ? (
                   <button
-                    onClick={() => handleCheckAction(check.action!)}
+                    onClick={() => handleCheckAction(check.action!, toast)}
                     className="text-figma-xs font-medium text-figma-blue hover:underline"
                   >
                     {check.action.label}
                   </button>
-                )}
+                ) : <span className="text-figma-xs text-figma-muted">—</span>}
               </div>
             </div>
           ))}
@@ -814,13 +909,13 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
                       rec.impact === 'medium' && 'bg-amber-50 text-figma-orange',
                       rec.impact === 'low' && 'bg-blue-50 text-figma-blue'
                     )}>
-                      {rec.impact} impact
+                      {rec.impact.charAt(0).toUpperCase() + rec.impact.slice(1)} impact
                     </span>
                     {rec.actions?.map(action => (
                       <button
                         key={action.label}
-                        onClick={() => handleCheckAction(action)}
-                        className="text-figma-xs font-medium text-figma-blue hover:underline"
+                        onClick={() => handleCheckAction(action, toast)}
+                        className="text-figma-xs font-medium text-figma-blue underline underline-offset-2"
                       >
                         {action.label}
                       </button>
@@ -854,9 +949,11 @@ export function BotTrafficPage() {
 
   // Get initial tab from URL
   const urlParams = new URLSearchParams(search);
+  const mockEmptyPeriod = import.meta.env.DEV && urlParams.get('mock') === 'empty-period';
   const tabParam = urlParams.get('tab');
   const initialTab = tabParam === 'by-type' ? 'by-type' : tabParam === 'site-health' ? 'site-health' : 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [botFilter, setBotFilter] = useState<string>('all');
 
   // Site health audit
@@ -996,6 +1093,14 @@ export function BotTrafficPage() {
     setRange(newRange);
   };
 
+  const handleAdjustDateRange = () => {
+    document.querySelector('main[aria-label="Bot traffic"]')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+    setDateFilterOpen(true);
+  };
+
   const handleNavigateSettings = () => {
     navigate('/app/settings/integrations');
   };
@@ -1049,8 +1154,11 @@ export function BotTrafficPage() {
 
   // Use API data or fallback to demo data (only if range includes today)
   // Guarded with defaults so they don't crash during loading
-  const isDemo = statsData?.cdnConfigured === true ? false : (statsData?.totalVisits === 0 || !statsData);
-  const showDemoData = isDemo && rangeIncludesToday;
+  const noResultsForRange = mockEmptyPeriod || Boolean(
+    statsData?.period?.hasHistoricalData && !statsData.period.hasDataInRange
+  );
+  const isDemo = !mockEmptyPeriod && (statsData?.cdnConfigured === true ? false : !statsData?.period?.hasHistoricalData);
+  const showDemoData = !mockEmptyPeriod && isDemo && rangeIncludesToday;
   const allBots = statsData?.byBot || [];
 
   // Always show all supported bots from constants - merge with real/demo data
@@ -1173,19 +1281,24 @@ export function BotTrafficPage() {
                 <span className="text-figma-xs">Updating...</span>
               </div>
             )}
-            {activeTab === 'site-health' && (
+            {activeTab === 'site-health' && audit && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={runAudit}
                 disabled={isAuditing}
-                className="gap-1.5 text-figma-sm font-medium"
+                className="rounded-lg gap-1.5 text-figma-sm font-medium"
               >
                 {isAuditing && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isAuditing ? 'Running...' : audit ? 'Re-run audit' : 'Run audit'}
               </Button>
             )}
-            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+            <TimeRangeSelector
+              value={range}
+              onChange={handleTimeRangeChange}
+              open={dateFilterOpen}
+              onOpenChange={setDateFilterOpen}
+            />
           </div>
         }
       />
@@ -1229,15 +1342,15 @@ export function BotTrafficPage() {
       {/* ================================================================
           ROW 1 — 4 Metric Cards (horizontal scroll, matching competitors)
           ================================================================ */}
-      <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hover mb-8 -mr-6 pr-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
         {/* Card 1: Total AI Visits */}
-        <div className="w-[260px] flex-shrink-0">
+        <div className="min-w-0">
           <MetricCard>
             <div className="flex items-center">
               <CardLabel>Total AI visits</CardLabel>
               <InfoTooltip content="Total page visits from AI crawlers in this time period" />
             </div>
-            {hasData ? (
+            {!noResultsForRange && hasData ? (
               <>
                 <StatMetric value={formatCompact(totalAIVisits)} trend={trend} />
                 <CardSubtitle>{getPeriodLabel(range.preset)}</CardSubtitle>
@@ -1250,14 +1363,17 @@ export function BotTrafficPage() {
                 <CardSubtitle>No AI crawl data for this period</CardSubtitle>
               </>
             )}
-            <CardDivider className="mt-5 mb-3" />
-            <div className="flex-1 overflow-y-auto scrollbar-none">
-              <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-12 text-right">Visits</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">%</span>
-              </div>
-              <div className="space-y-1.5">
+            <CardDivider className="mt-5 mb-1.5" />
+            <MetricListScroller
+              header={
+                <div className="flex items-center gap-2">
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-12 text-right">Visits</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">%</span>
+                </div>
+              }
+            >
+              {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                 {aiBotsWithPercent.map(bot => (
                   <div key={bot.botType} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1274,19 +1390,19 @@ export function BotTrafficPage() {
                     </span>
                   </div>
                 ))}
-              </div>
-            </div>
+              </div>}
+            </MetricListScroller>
           </MetricCard>
         </div>
 
         {/* Card 2: Pages Crawled */}
-        <div className="w-[260px] flex-shrink-0">
+        <div className="min-w-0">
           <MetricCard>
             <div className="flex items-center">
               <CardLabel>Pages crawled</CardLabel>
               <InfoTooltip content="Number of unique URLs visited by AI crawlers" />
             </div>
-            {hasData ? (
+            {!noResultsForRange && hasData ? (
               <>
                 <StatMetric value={uniquePages} trend={pagesTrend} />
                 <CardSubtitle>unique URLs</CardSubtitle>
@@ -1299,13 +1415,16 @@ export function BotTrafficPage() {
                 <CardSubtitle>No pages crawled this period</CardSubtitle>
               </>
             )}
-            <CardDivider className="mt-5 mb-3" />
-            <div className="flex-1 overflow-y-auto scrollbar-none">
-              <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                <span className="text-figma-2xs font-medium text-figma-muted flex-1">Page</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">Visits</span>
-              </div>
-              <div className="space-y-1.5">
+            <CardDivider className="mt-5 mb-1.5" />
+            <MetricListScroller
+              header={
+                <div className="flex items-center gap-2">
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Page</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">Visits</span>
+                </div>
+              }
+            >
+              {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                 {hasData ? (
                   displayTopPages.slice(0, 4).map(page => (
                     <div key={page.path} className="flex items-center gap-2">
@@ -1323,19 +1442,19 @@ export function BotTrafficPage() {
                     </div>
                   ))
                 )}
-              </div>
-            </div>
+              </div>}
+            </MetricListScroller>
           </MetricCard>
         </div>
 
         {/* Card 3: Top AI Bot */}
-        <div className="w-[260px] flex-shrink-0">
+        <div className="min-w-0">
           <MetricCard>
             <div className="flex items-center">
               <CardLabel>Top AI bot</CardLabel>
               <InfoTooltip content="The AI crawler with the most visits this period" />
             </div>
-            {hasData ? (
+            {!noResultsForRange && hasData ? (
               <>
                 <div className="h-[38px] flex items-center mt-2 mb-1">
                   <div className="flex items-baseline gap-2">
@@ -1359,14 +1478,17 @@ export function BotTrafficPage() {
                 <CardSubtitle>No bot visits this period</CardSubtitle>
               </>
             )}
-            <CardDivider className="mt-5 mb-3" />
-            <div className="flex-1 overflow-y-auto scrollbar-none">
-              <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                <span className="text-figma-2xs font-medium text-figma-muted flex-1">Page</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-8 text-right">Visits</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-16 text-right">Last crawl</span>
-              </div>
-              <div className="space-y-1.5">
+            <CardDivider className="mt-5 mb-1.5" />
+            <MetricListScroller
+              header={
+                <div className="flex items-center gap-2">
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Page</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-8 text-right">Visits</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-16 text-right">Last crawl</span>
+                </div>
+              }
+            >
+              {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                 {hasData ? (
                   topBotPages.map(page => (
                     <div key={page.path} className="flex items-center gap-2">
@@ -1388,19 +1510,19 @@ export function BotTrafficPage() {
                     </div>
                   ))
                 )}
-              </div>
-            </div>
+              </div>}
+            </MetricListScroller>
           </MetricCard>
         </div>
 
         {/* Card 4: Latest Crawl Activity */}
-        <div className="w-[260px] flex-shrink-0">
+        <div className="min-w-0">
           <MetricCard>
             <div className="flex items-center">
               <CardLabel>Latest activity</CardLabel>
               <InfoTooltip content="When AI crawlers last visited your site" />
             </div>
-            {hasData ? (
+            {!noResultsForRange && hasData ? (
               <>
                 <div className="h-[38px] flex items-center mt-2 mb-1">
                   <div className="flex items-center gap-2">
@@ -1422,13 +1544,16 @@ export function BotTrafficPage() {
                 <CardSubtitle>No crawls detected this period</CardSubtitle>
               </>
             )}
-            <CardDivider className="mt-5 mb-3" />
-            <div className="flex-1 overflow-y-auto scrollbar-none">
-              <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                <span className="text-figma-2xs font-medium text-figma-muted w-16 text-right">When</span>
-              </div>
-              <div className="space-y-1.5">
+            <CardDivider className="mt-5 mb-1.5" />
+            <MetricListScroller
+              header={
+                <div className="flex items-center gap-2">
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-16 text-right">When</span>
+                </div>
+              }
+            >
+              {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                 {allBotsList.map(bot => {
                   const lastSeen = lastSeenByBot[bot.id];
                   return (
@@ -1445,8 +1570,8 @@ export function BotTrafficPage() {
                     </div>
                   );
                 })}
-              </div>
-            </div>
+              </div>}
+            </MetricListScroller>
           </MetricCard>
         </div>
       </div>
@@ -1459,11 +1584,15 @@ export function BotTrafficPage() {
           title="AI bot visits over time"
           subtitle="Daily AI crawler activity"
         >
-          <BotTrafficChart
-            bots={aiBotsWithPercent}
-            timeRange={range}
-            height={280}
-          />
+          {noResultsForRange ? (
+            <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
+          ) : (
+            <BotTrafficChart
+              bots={aiBotsWithPercent}
+              timeRange={range}
+              height={280}
+            />
+          )}
         </ContentCard>
       </div>
 
@@ -1475,24 +1604,26 @@ export function BotTrafficPage() {
         <ContentCard
           title="AI bot breakdown"
           subtitle="Visits by AI crawler"
-          footer={
+          footer={!noResultsForRange ? (
             <InsightBox variant="muted">
               {topBot.botType} is your most active AI crawler, accounting for {aiBotsWithPercent[0]?.percentage || 0}% of visits.
             </InsightBox>
-          }
+          ) : undefined}
         >
           <div className="space-y-0">
             {/* Table Header */}
             <TableHeader
               gridCols="grid-cols-[1fr_80px_60px]"
               columns={[
-                { label: 'BOT' },
-                { label: 'VISITS', align: 'right' },
+                { label: 'Bot' },
+                { label: 'Visits', align: 'right' },
                 { label: '%', align: 'right' },
               ]}
             />
             {/* Rows */}
-            {aiBotsWithPercent.map(bot => (
+            {noResultsForRange ? (
+              <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
+            ) : aiBotsWithPercent.map(bot => (
               <div
                 key={bot.botType}
                 className="grid grid-cols-[1fr_80px_60px] gap-3 items-center py-2.5 px-2 border-b border-figma-border-light last:border-0"
@@ -1517,7 +1648,7 @@ export function BotTrafficPage() {
           title="Top crawled pages"
           subtitle="Most visited URLs by AI bots"
           onAction={() => navigate('/app/bots')}
-          footer={(() => {
+          footer={!noResultsForRange ? (() => {
             // Calculate insight based on content type
             const blogCount = displayTopPages.filter(p => p.path.includes('/blog')).reduce((s, p) => s + p.visits, 0);
             const docsCount = displayTopPages.filter(p => p.path.includes('/docs')).reduce((s, p) => s + p.visits, 0);
@@ -1531,19 +1662,21 @@ export function BotTrafficPage() {
             }
 
             return <InsightBox variant="muted">{insight}</InsightBox>;
-          })()}
+          })() : undefined}
         >
           <div className="space-y-0">
             {/* Table Header */}
             <TableHeader
               gridCols="grid-cols-[1fr_80px]"
               columns={[
-                { label: 'PAGE' },
-                { label: 'VISITS', align: 'right' },
+                { label: 'Page' },
+                { label: 'Visits', align: 'right' },
               ]}
             />
             {/* Rows */}
-            {displayTopPages.map(page => (
+            {noResultsForRange ? (
+              <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
+            ) : displayTopPages.map(page => (
               <div
                 key={page.path}
                 className="grid grid-cols-[1fr_80px] gap-3 items-center py-2.5 px-2 border-b border-figma-border-light last:border-0 hover:bg-figma-hover transition-colors cursor-pointer"
@@ -1571,18 +1704,21 @@ export function BotTrafficPage() {
             <MetricCard>
               <CardLabel>AI bots</CardLabel>
               <StatMetric
-                value={formatCompact(totalAIVisits)}
-                trend={trend}
+                value={noResultsForRange ? '—' : formatCompact(totalAIVisits)}
+                trend={noResultsForRange ? 0 : trend}
               />
-              <CardSubtitle>{aiBots.filter(b => b.visitCount > 0).length} crawlers active</CardSubtitle>
-              <CardDivider className="mt-5 mb-3" />
-              <div className="flex-1 overflow-y-auto scrollbar-none">
-                <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                  <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-12 text-right">Visits</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">Pages</span>
-                </div>
-                <div className="space-y-1.5">
+              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${aiBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardDivider className="mt-5 mb-1.5" />
+              <MetricListScroller
+                header={
+                  <div className="flex items-center gap-2">
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-12 text-right">Visits</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">Pages</span>
+                  </div>
+                }
+              >
+                {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                   {aiBotsWithPercent.map(bot => (
                     <div key={bot.botType} className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1599,26 +1735,29 @@ export function BotTrafficPage() {
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
+                </div>}
+              </MetricListScroller>
             </MetricCard>
 
             {/* Card 2: Search Bots */}
             <MetricCard>
               <CardLabel>Search bots</CardLabel>
               <StatMetric
-                value={formatCompact(showDemoData ? searchBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.searchVisits || 0))}
-                trend={showDemoData ? 8.3 : 0}
+                value={noResultsForRange ? '—' : formatCompact(showDemoData ? searchBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.searchVisits || 0))}
+                trend={noResultsForRange ? 0 : showDemoData ? 8.3 : 0}
               />
-              <CardSubtitle>{searchBots.filter(b => b.visitCount > 0).length} crawlers active</CardSubtitle>
-              <CardDivider className="mt-5 mb-3" />
-              <div className="flex-1 overflow-y-auto scrollbar-none">
-                <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                  <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-12 text-right">Visits</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">Pages</span>
-                </div>
-                <div className="space-y-1.5">
+              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${searchBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardDivider className="mt-5 mb-1.5" />
+              <MetricListScroller
+                header={
+                  <div className="flex items-center gap-2">
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-12 text-right">Visits</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">Pages</span>
+                  </div>
+                }
+              >
+                {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                   {searchBots.map(bot => (
                     <div key={bot.botType} className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1635,26 +1774,29 @@ export function BotTrafficPage() {
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
+                </div>}
+              </MetricListScroller>
             </MetricCard>
 
             {/* Card 3: Social Bots */}
             <MetricCard>
               <CardLabel>Social bots</CardLabel>
               <StatMetric
-                value={formatCompact(showDemoData ? socialBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.socialVisits || 0))}
-                trend={showDemoData ? 5.1 : 0}
+                value={noResultsForRange ? '—' : formatCompact(showDemoData ? socialBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.socialVisits || 0))}
+                trend={noResultsForRange ? 0 : showDemoData ? 5.1 : 0}
               />
-              <CardSubtitle>{socialBots.filter(b => b.visitCount > 0).length} crawlers active</CardSubtitle>
-              <CardDivider className="mt-5 mb-3" />
-              <div className="flex-1 overflow-y-auto scrollbar-none">
-                <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                  <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-12 text-right">Visits</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">Pages</span>
-                </div>
-                <div className="space-y-1.5">
+              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${socialBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardDivider className="mt-5 mb-1.5" />
+              <MetricListScroller
+                header={
+                  <div className="flex items-center gap-2">
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-12 text-right">Visits</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">Pages</span>
+                  </div>
+                }
+              >
+                {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                   {socialBots.map(bot => (
                     <div key={bot.botType} className="flex items-center gap-2">
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1671,26 +1813,29 @@ export function BotTrafficPage() {
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
+                </div>}
+              </MetricListScroller>
             </MetricCard>
 
             {/* Card 4: Other Bots */}
             <MetricCard>
               <CardLabel>Other bots</CardLabel>
               <StatMetric
-                value={formatCompact(statsData?.otherVisits || 0)}
-                trend={showDemoData ? -2.4 : 0}
+                value={noResultsForRange ? '—' : formatCompact(statsData?.otherVisits || 0)}
+                trend={noResultsForRange ? 0 : showDemoData ? -2.4 : 0}
               />
-              <CardSubtitle>{otherBots.length} bot types detected</CardSubtitle>
-              <CardDivider className="mt-5 mb-3" />
-              <div className="flex-1 overflow-y-auto scrollbar-none">
-                <div className="flex items-center gap-2 pb-1.5 mb-1.5 border-b border-figma-border-light sticky top-0 bg-white">
-                  <span className="text-figma-2xs font-medium text-figma-muted flex-1">Bot</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-12 text-right">Visits</span>
-                  <span className="text-figma-2xs font-medium text-figma-muted w-10 text-right">Pages</span>
-                </div>
-                <div className="space-y-1.5">
+              <CardSubtitle>{noResultsForRange ? '— bot types detected' : `${otherBots.length} bot types detected`}</CardSubtitle>
+              <CardDivider className="mt-5 mb-1.5" />
+              <MetricListScroller
+                header={
+                  <div className="flex items-center gap-2">
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide flex-1">Bot</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-12 text-right">Visits</span>
+                  <span className="text-figma-2xs font-medium text-figma-muted tracking-wide w-10 text-right">Pages</span>
+                  </div>
+                }
+              >
+                {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
                   {otherBots.length > 0 ? otherBots.map(bot => (
                   <div key={bot.botType} className="flex items-center gap-2">
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -1709,8 +1854,8 @@ export function BotTrafficPage() {
                   )) : (
                     <span className="text-figma-2xs text-figma-muted">Monitors, scanners, misc crawlers</span>
                   )}
-                </div>
-              </div>
+                </div>}
+              </MetricListScroller>
             </MetricCard>
           </div>
 
@@ -1720,51 +1865,42 @@ export function BotTrafficPage() {
           <ContentCard
             title="Recent activity"
             subtitle="Latest crawler activity on your site"
+            contentClassName="pt-0"
             headerRight={
               <div className="flex items-center gap-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-figma-muted" />
-                  <Input
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className="h-7 w-[140px] pl-7 text-figma-xs"
-                  />
-                </div>
+                <FilterSearch
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder="Search..."
+                  className="w-[140px]"
+                />
                 {/* Type Filter */}
-                <Select value={typeFilter} onValueChange={(v: 'all' | 'ai' | 'search' | 'social' | 'other') => { setTypeFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[90px] h-7 text-figma-xs">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-figma-xs">All types</SelectItem>
-                    <SelectItem value="ai" className="text-figma-xs">AI</SelectItem>
-                    <SelectItem value="search" className="text-figma-xs">Search</SelectItem>
-                    <SelectItem value="social" className="text-figma-xs">Social</SelectItem>
-                    <SelectItem value="other" className="text-figma-xs">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FilterSelect
+                  value={typeFilter}
+                  onValueChange={(v) => { setTypeFilter(v as 'all' | 'ai' | 'search' | 'social' | 'other'); setCurrentPage(1); }}
+                  options={[
+                    { value: 'all', label: 'All types' },
+                    { value: 'ai', label: 'AI' },
+                    { value: 'search', label: 'Search' },
+                    { value: 'social', label: 'Social' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                />
                 {/* Bot Filter */}
-                <Select value={botFilter} onValueChange={(v) => { setBotFilter(v); setCurrentPage(1); }}>
-                  <SelectTrigger className="w-[110px] h-7 text-figma-xs">
-                    <SelectValue placeholder="Bot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-figma-xs">All bots</SelectItem>
-                    {availableBots.filter(b => b !== 'all').map(bot => (
-                      <SelectItem key={bot} value={bot} className="text-figma-xs">
-                        {bot}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FilterSelect
+                  value={botFilter}
+                  onValueChange={(v) => { setBotFilter(v); setCurrentPage(1); }}
+                  options={[
+                    { value: 'all', label: 'All bots' },
+                    ...availableBots.filter(b => b !== 'all').map(b => ({ value: b, label: b })),
+                  ]}
+                />
                 {/* Export */}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExport}
-                  className="h-7 text-figma-xs font-medium gap-1"
+                  className="h-7 text-figma-2xs font-medium gap-1"
                 >
                   <Download className="w-3 h-3" />
                   Export
@@ -1773,34 +1909,36 @@ export function BotTrafficPage() {
             }
           >
             {/* Recent Activity Table - using fr units like competitors table */}
-            <div className="grid grid-cols-[2fr_3fr_5fr_2fr_2fr_2fr_2fr] gap-2 px-2 py-2 border-b border-figma-border-light bg-figma-hover rounded-t-lg">
+            <div className="grid grid-cols-[2fr_3fr_5fr_2fr_2fr_2fr_2fr] gap-2 px-2 py-2 border-b border-figma-border-light">
               <button
                 onClick={() => handleSort('visitedAt')}
-                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary uppercase hover:text-figma-primary transition-colors"
+                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary hover:text-figma-primary transition-colors"
               >
-                TIME <SortIcon field="visitedAt" />
+                Time <SortIcon field="visitedAt" />
               </button>
               <button
                 onClick={() => handleSort('botType')}
-                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary uppercase hover:text-figma-primary transition-colors"
+                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary hover:text-figma-primary transition-colors"
               >
-                BOT <SortIcon field="botType" />
+                Bot <SortIcon field="botType" />
               </button>
               <button
                 onClick={() => handleSort('url')}
-                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary uppercase hover:text-figma-primary transition-colors"
+                className="flex items-center gap-1 text-figma-2xs font-medium text-figma-secondary hover:text-figma-primary transition-colors"
               >
-                PAGE <SortIcon field="url" />
+                Page <SortIcon field="url" />
               </button>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">STATUS</span>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">TIME</span>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">SIZE</span>
-              <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">TYPE</span>
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right">Status</span>
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right">Time</span>
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right">Size</span>
+              <span className="text-figma-2xs font-medium text-figma-secondary text-right">Type</span>
             </div>
 
             {/* Recent Visits Rows */}
             <div className="divide-y divide-figma-border-light">
-              {recentVisits.length === 0 ? (
+              {noResultsForRange ? (
+                <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
+              ) : recentVisits.length === 0 ? (
                 <div className="grid grid-cols-[2fr_3fr_5fr_2fr_2fr_2fr_2fr] gap-2 items-center px-2 py-2 text-figma-muted">
                   <span>—</span>
                   <span>—</span>
@@ -1872,7 +2010,7 @@ export function BotTrafficPage() {
             </div>
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {!noResultsForRange && totalPages > 1 && (
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-figma-border-light">
                 <span className="text-figma-xs text-figma-muted">
                   Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered}

@@ -59,6 +59,10 @@ function statusToHealth(checkResults: CheckStatus[]): HealthStatus {
   return 'good';
 }
 
+function normalizeDomain(value?: string): string | undefined {
+  return value?.replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
 // =============================================================================
 // ROUTES
 // =============================================================================
@@ -71,15 +75,18 @@ router.post('/audit', async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   try {
+    const activeBrandConfig = await getActiveBrandConfig();
+
     // Get domain from request body or brand config
-    let domain = req.body.domain as string | undefined;
+    const explicitDomain = req.body.domain as string | undefined;
+    let domain = explicitDomain;
+    let domainFromBrand = false;
 
     if (!domain) {
       // Fallback 1: brand config
-      const activeBrandConfig = await getActiveBrandConfig();
-
       if (activeBrandConfig?.domain) {
         domain = activeBrandConfig.domain;
+        domainFromBrand = true;
       }
     }
 
@@ -100,7 +107,15 @@ router.post('/audit', async (req: Request, res: Response) => {
     }
 
     // Clean domain
-    domain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    domain = normalizeDomain(domain) as string;
+    const activeDomain = normalizeDomain(activeBrandConfig?.domain || undefined);
+    const useBrandContext = domainFromBrand || activeDomain === domain;
+    const starterName = useBrandContext ? activeBrandConfig?.name || domain : domain;
+    const organizationName = starterName;
+    const auditUrl = `https://${domain}`;
+    const starterDescription = useBrandContext && activeBrandConfig?.industry
+      ? `${activeBrandConfig.name} provides ${activeBrandConfig.industry} products and services.`
+      : `A guide to ${starterName}.`;
 
     // Run all checks in parallel
     const [llmsTxt, robotsTxt, sitemap, schema] = await Promise.all([
@@ -112,6 +127,24 @@ router.post('/audit', async (req: Request, res: Response) => {
 
     // Build checks array
     const checks: HealthCheck[] = [];
+    const starterLlmsTxt = generateStarterLlmsTxt(
+      starterName,
+      starterDescription,
+      [],
+    );
+    const organizationSchema = generateOrganizationSchema(organizationName, auditUrl);
+    const llmsCopyFeedback = {
+      title: `${organizationName} llms.txt starter copied`,
+      description: `Paste this into ${auditUrl}/llms.txt, customize the page list, publish it, then rerun the audit.`,
+    };
+    const robotsCopyFeedback = {
+      title: `${organizationName} AI crawler rules copied`,
+      description: `Paste these rules into ${auditUrl}/robots.txt, review the bots you want to allow, publish the file, then rerun the audit.`,
+    };
+    const schemaCopyFeedback = {
+      title: `${organizationName} Organization schema copied`,
+      description: `Add this JSON-LD to the homepage head at ${auditUrl}, publish the page, then rerun the audit.`,
+    };
 
     // llms.txt checks
     checks.push({
@@ -124,7 +157,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         : 'File not found at /llms.txt',
       action: llmsTxt.exists
         ? { label: 'View', type: 'link', value: llmsTxt.url || '' }
-        : { label: 'Generate', type: 'modal', value: 'generate-llms-txt' },
+        : { label: 'Copy starter', type: 'copy', value: starterLlmsTxt, copyFeedback: llmsCopyFeedback },
     });
 
     if (llmsTxt.exists) {
@@ -162,7 +195,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         ? `All ${allowedBots.length} AI bots allowed`
         : `${blockedBots.length} of ${robotsTxt.aiBots.length} blocked`,
       action: blockedBots.length > 0
-        ? { label: 'Fix', type: 'copy', value: generateAIBotAllowSnippet() }
+        ? { label: 'Fix', type: 'copy', value: generateAIBotAllowSnippet(), copyFeedback: robotsCopyFeedback }
         : undefined,
     });
 
@@ -193,9 +226,6 @@ router.post('/audit', async (req: Request, res: Response) => {
         details: sitemapFreshness
           ? `lastmod ${sitemapFreshness} days ago`
           : 'No lastmod dates found',
-        action: sitemapFreshness && sitemapFreshness > 30
-          ? { label: 'Update', type: 'modal', value: 'update-sitemap' }
-          : undefined,
       });
     }
 
@@ -211,7 +241,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         ? 'Found on homepage'
         : 'Not found on homepage',
       action: !schemaTypeFound('Organization')
-        ? { label: 'Add', type: 'copy', value: generateOrganizationSchema(domain, `https://${domain}`) }
+        ? { label: 'Add', type: 'copy', value: organizationSchema, copyFeedback: schemaCopyFeedback }
         : undefined,
     });
 
@@ -331,7 +361,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         impact: 'high',
         actions: [
           { label: 'View guide', type: 'link', value: 'https://schema.org/Organization' },
-          { label: 'Copy snippet', type: 'copy', value: generateOrganizationSchema(domain, `https://${domain}`) },
+          { label: 'Copy snippet', type: 'copy', value: organizationSchema, copyFeedback: schemaCopyFeedback },
         ],
       });
     }
@@ -346,7 +376,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         impact: 'high',
         actions: [
           { label: 'View robots.txt', type: 'link', value: robotsTxt.url || `https://${domain}/robots.txt` },
-          { label: 'Copy fix', type: 'copy', value: generateAIBotAllowSnippet() },
+          { label: 'Copy fix', type: 'copy', value: generateAIBotAllowSnippet(), copyFeedback: robotsCopyFeedback },
         ],
       });
     }
@@ -361,7 +391,7 @@ router.post('/audit', async (req: Request, res: Response) => {
         impact: 'medium',
         actions: [
           { label: 'View guide', type: 'link', value: 'https://llmstxt.org' },
-          { label: 'Generate file', type: 'modal', value: 'generate-llms-txt' },
+          { label: 'Copy starter', type: 'copy', value: starterLlmsTxt, copyFeedback: llmsCopyFeedback },
         ],
       });
     }

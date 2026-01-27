@@ -18,10 +18,11 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { ContentCard } from '@/components/shared/dashboard-card';
 import { Skeleton } from '@/components/shared/skeleton-loader';
+import { CardEmptyState } from '@/components/shared/empty-state';
 import { PlatformIcon } from '@/components/ui/platform-icon';
 import { CompanyAvatar } from '@/components/ui/company-avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TimeRangePreset } from '@shared/types';
 
@@ -101,7 +102,7 @@ function JourneyStageBadges({ stages }: { stages: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {stages.map((stage) => {
-        const config = STAGE_CONFIG[stage] ?? { bg: 'bg-gray-50', text: 'text-gray-700', label: stage };
+        const config = STAGE_CONFIG[stage] ?? { bg: 'bg-figma-hover', text: 'text-figma-secondary', label: stage };
         return (
           <span
             key={stage}
@@ -138,7 +139,7 @@ function CompetitorAvatar({ name, size = 'sm' }: { name: string; size?: 'xs' | '
           // Fallback to CompanyAvatar on error
           const target = e.target as HTMLImageElement;
           target.style.display = 'none';
-          target.parentElement!.innerHTML = `<span class="text-[8px] font-semibold text-white">${name.slice(0, 2).toUpperCase()}</span>`;
+          target.parentElement!.innerHTML = `<span class="text-[8px] font-semibold" style="color:#fff"">${name.slice(0, 2).toUpperCase()}</span>`;
           target.parentElement!.style.backgroundColor = '#3182CE';
         }}
       />
@@ -172,7 +173,7 @@ function CompetitorAvatarStack({ competitors, maxVisible = 3 }: { competitors: s
               className="w-5 h-5 rounded-full border-2 border-white bg-figma-muted flex items-center justify-center"
               style={{ zIndex: 0 }}
             >
-              <span className="text-white text-[8px] font-medium">+{overflow}</span>
+              <span style={{ color: "#fff" }} className="text-[8px] font-medium">+{overflow}</span>
             </div>
           )}
         </button>
@@ -225,7 +226,7 @@ const COLUMN_DEFS: ColumnDef[] = [
 function TableHeader() {
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-figma-border-light bg-figma-hover rounded-t-lg">
+      <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-figma-border-light">
         {COLUMN_DEFS.map((col) => (
           <div
             key={col.label}
@@ -237,7 +238,7 @@ function TableHeader() {
           >
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-wide cursor-help inline-flex items-center gap-1">
+                <span className="text-figma-2xs font-medium text-figma-secondary tracking-wide cursor-help inline-flex items-center gap-1">
                   {col.label}
                   <HelpCircle className="w-3 h-3 text-figma-muted" />
                 </span>
@@ -318,7 +319,7 @@ function TableRow({ prompt }: { prompt: TopPrompt }) {
                   )}>
                     <span className={cn(
                       "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                      mentioned ? "bg-green-500" : "bg-gray-400"
+                      mentioned ? "bg-success" : "bg-figma-muted"
                     )} />
                     <PlatformIcon platform={platform} size="sm" />
                     <span className="text-figma-xs capitalize">
@@ -422,11 +423,11 @@ export function TopPromptsPreview({ timeRange, brandName, onViewAll, className }
         onAction={onViewAll}
         className={className}
       >
-        <div className="py-8 text-center">
-          <p className="text-figma-sm text-figma-muted">
-            Prompt data will appear once mentions are analyzed.
-          </p>
-        </div>
+        <CardEmptyState
+          icon={MessageSquare}
+          title="No prompt data yet"
+          description="Prompt data will appear once mentions are analyzed."
+        />
       </ContentCard>
     );
   }
@@ -437,6 +438,7 @@ export function TopPromptsPreview({ timeRange, brandName, onViewAll, className }
       actionLabel="View all"
       onAction={onViewAll}
       className={className}
+      contentClassName="pt-0"
     >
       <TooltipProvider>
         <div className="overflow-x-auto">

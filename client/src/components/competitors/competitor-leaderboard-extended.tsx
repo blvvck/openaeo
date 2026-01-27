@@ -31,34 +31,34 @@ export function CompetitorLeaderboardExtended({
     <div className={cn('w-full', className)}>
       {/* Table Header */}
       <div className="grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 px-5 py-3 border-b border-figma-border-light">
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          RANK
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Rank
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          BRAND
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Brand
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
-          SHARE OF ANSWERS
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
+          Share of answers
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
           HIGH-INTENT
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal pl-3">
-          TOP PROMPT
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal pl-3">
+          Top prompt
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal">
-          PLATFORMS
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal">
+          Platforms
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
-          SCORE
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
+          Score
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
-          TREND
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
+          Trend
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
           Δ
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase tracking-normal text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
           {/* Actions column - no header text */}
         </span>
       </div>

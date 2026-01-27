@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { Switch, Route } from "wouter";
-import { RedirectToSignIn, SignIn, SignUp, useAuth, useClerk } from "@clerk/react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { Switch, Route, Redirect } from "wouter";
+import { RedirectToSignIn, SignIn, SignUp, useAuth, useClerk, useUser } from "@clerk/react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { WorkspaceSetup } from "@/components/onboarding/workspace-setup";
+import { AppLoadingScreen } from "@/components/shared/app-loading";
+import { CompetitorRangeMock } from "@/pages/competitor-range-mock";
 import { APP_CONFIG, DEMO_CONFIG } from "@/config/app";
 import { getActiveWorkspaceId, setActiveWorkspace, workspaceQueryClient, type WorkspaceListResponse } from "./lib/workspace-query";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -20,7 +23,6 @@ import {
   SidebarNavContent,
   SidebarNavGroup,
   SidebarNavItem,
-  SidebarNavFooter,
   SidebarNavHeaderToggle,
 } from "@/components/layout/sidebar-nav";
 import {
@@ -49,11 +51,8 @@ import {
   Building2,
   UsersRound,
   Plug,
-  CreditCard,
   ChevronDown,
-  ChevronLeft,
   Sparkles,
-  User,
 } from "lucide-react";
 import { useLocation as useWouterLocation } from "wouter";
 
@@ -65,6 +64,8 @@ import { BotTrafficPage } from "@/pages/app/bot-traffic";
 import { PromptsPage } from "@/pages/app/prompts";
 import { CitationsPage } from "@/pages/app/citations";
 import { EmptyState } from "@/components/shared/empty-state";
+import { GlobalSearch } from "@/components/layout/global-search";
+import { AccountMenu } from "@/components/layout/account-menu";
 
 /**
  * Placeholder component for pages being built
@@ -107,9 +108,18 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
   const { sidebarState, toggleSidebar } = useAppShell();
   const isCollapsed = sidebarState === "collapsed";
   const [isBrandHovered, setIsBrandHovered] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const isHeaderActive = isBrandHovered || isMenuOpen;
+  const headerRowRef = useRef<HTMLDivElement>(null);
+
+  const handleHeaderPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = headerRowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setIsBrandHovered(event.clientX < rect.right - 36);
+  };
 
   const currentWorkspace = workspaces.find(({ id }) => id === currentWorkspaceId);
-  const workspaceName = currentWorkspace?.name ?? DEMO_CONFIG.workspaceName;
+  const workspaceName = currentWorkspace?.name ?? "Your organization";
 
   const triggerContent = (
     <div className={cn(
@@ -121,23 +131,14 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
         <Sparkles className="h-4 w-4" />
       </div>
       {!isCollapsed && (
-        <>
-          <div className="flex flex-1 flex-col overflow-hidden text-left">
-            {/* Workspace name is primary */}
-            <span className="truncate text-sm font-medium text-sidebar-foreground">
-              {workspaceName}
-            </span>
-            {/* App name as subtle subtitle - lighter */}
-            <span className="truncate text-xs text-figma-muted">
-              {APP_CONFIG.name}
-            </span>
-          </div>
-          {/* Dropdown caret - only visible on brand hover */}
-          <ChevronDown className={cn(
-            "h-4 w-4 shrink-0 text-figma-muted transition-opacity duration-150",
-            isBrandHovered ? "opacity-100" : "opacity-0"
-          )} />
-        </>
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden text-left">
+          <span className="truncate text-sm font-medium text-sidebar-foreground">
+            {workspaceName}
+          </span>
+          <span className="truncate text-xs text-figma-muted">
+            {APP_CONFIG.name}
+          </span>
+        </div>
       )}
     </div>
   );
@@ -146,12 +147,10 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
     <Button
       variant="ghost"
       className={cn(
-        "h-10 px-2 justify-start rounded-md flex-1",
-        "hover:bg-sidebar-accent",
+        "h-10 px-2 justify-start rounded-md flex-1 min-w-0 active:scale-100",
+        "hover:bg-transparent",
         isCollapsed && "justify-center"
       )}
-      onMouseEnter={() => setIsBrandHovered(true)}
-      onMouseLeave={() => setIsBrandHovered(false)}
     >
       {triggerContent}
     </Button>
@@ -159,12 +158,23 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
 
   return (
     <div
+      ref={headerRowRef}
       className={cn(
-        "flex items-center h-14 border-b border-sidebar-border",
-        isCollapsed ? "px-2" : "px-1"
+        "relative flex items-center h-14 border-b border-sidebar-border transition-colors duration-150",
+        isCollapsed ? "px-2" : "px-1",
+        !isCollapsed && "pr-9",
+        isHeaderActive && "bg-sidebar-accent"
       )}
+      onPointerMove={handleHeaderPointerMove}
+      onPointerLeave={() => setIsBrandHovered(false)}
     >
-      <DropdownMenu>
+      <DropdownMenu
+        modal={false}
+        onOpenChange={(open) => {
+          setIsMenuOpen(open);
+          if (!open) setIsBrandHovered(false);
+        }}
+      >
         {isCollapsed ? (
           <SimpleTooltip content="Switch workspace" side="right">
             <DropdownMenuTrigger asChild>
@@ -222,13 +232,16 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
             variant="ghost"
             size="icon"
             className={cn(
-              "h-8 w-8 shrink-0 text-figma-muted hover:bg-sidebar-accent hover:text-sidebar-foreground transition-opacity duration-150",
-              isBrandHovered ? "opacity-0 pointer-events-none" : "opacity-100"
+              "absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-figma-muted hover:bg-sidebar-accent hover:text-sidebar-foreground",
+              isHeaderActive && "pointer-events-none"
             )}
             onClick={toggleSidebar}
             aria-label="Collapse sidebar"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronDown className={cn(
+              "h-4 w-4 transition-transform duration-150",
+              isHeaderActive ? "rotate-0" : "rotate-90"
+            )} />
           </Button>
         </SimpleTooltip>
       )}
@@ -245,12 +258,44 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
  * ACT: Insights, Reports, Alerts
  *
  * Settings moved to:
- * - User profile dropdown (footer): Team, Billing, Preferences
+ * - User profile dropdown (top header): Team, Preferences
  * - Brand switcher dropdown (top): Brand setup, Integrations
  */
+function OnboardingPage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const queryClient = useQueryClient();
+  const [, navigate] = useWouterLocation();
+  const { data: workspaceData } = useQuery<WorkspaceListResponse>({
+    queryKey: ["/api/workspaces"],
+    enabled: isLoaded && Boolean(isSignedIn),
+  });
+
+  if (!isLoaded) return <AppLoadingScreen />;
+  if (!isSignedIn) return <RedirectToSignIn />;
+  if (!workspaceData) return <AppLoadingScreen label="Loading your organization" />;
+
+  const activeWorkspace = workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
+    ?? workspaceData.workspaces.find(({ id }) => id === workspaceData.currentWorkspaceId)
+    ?? workspaceData.workspaces[0];
+
+  if (!activeWorkspace) return null;
+  if (activeWorkspace.onboarding_completed_at) return <Redirect to="/app/dashboard" />;
+
+  return (
+    <WorkspaceSetup
+      initialName={activeWorkspace.name}
+      onComplete={async () => {
+        await queryClient.invalidateQueries({ queryKey: ["/api/workspaces"] });
+        navigate("/app/dashboard");
+      }}
+    />
+  );
+}
+
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
+  const { user } = useUser();
   const { data: workspaceData, isPending: workspacesPending, error: workspaceError } = useQuery<WorkspaceListResponse>({
     queryKey: ["/api/workspaces"],
     enabled: isLoaded && Boolean(isSignedIn),
@@ -262,10 +307,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     await signOut({ redirectUrl: "/" });
   };
 
-  if (!isLoaded || (isSignedIn && workspacesPending)) return null;
+  if (!isLoaded || (isSignedIn && workspacesPending)) return <AppLoadingScreen />;
   if (!isSignedIn) return <RedirectToSignIn />;
   if (!workspaceData || workspaceError) {
     return <div className="p-6 text-sm text-destructive">Unable to load your workspaces. Refresh to try again.</div>;
+  }
+
+  const activeWorkspace = workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
+    ?? workspaceData.workspaces.find(({ id }) => id === workspaceData.currentWorkspaceId)
+    ?? workspaceData.workspaces[0];
+
+  if (activeWorkspace && !activeWorkspace.onboarding_completed_at) {
+    return <Redirect to="/onboarding" />;
   }
 
   const handleSwitchWorkspace = (workspaceId: string) => {
@@ -326,22 +379,21 @@ function AppLayout({ children }: { children: React.ReactNode }) {
             </SidebarNavGroup>
           </SidebarNavContent>
 
-          {/* User profile footer with Team, Billing, Preferences */}
-          <SidebarNavFooter
-            avatar={<User className="h-4 w-4" />}
-            primaryText={DEMO_CONFIG.user.name}
-            secondaryText={DEMO_CONFIG.user.plan}
-            email={DEMO_CONFIG.user.email}
-            onLogout={handleLogout}
-            showWorkspaceSwitcher={false}
-          />
         </SidebarNav>
       </AppShellSidebar>
 
       <AppShellMain>
-        <AppShellHeader>
+        <AppShellHeader className="pr-6 lg:pr-8">
           <SidebarNavHeaderToggle />
           <div className="flex-1" />
+          <GlobalSearch />
+          <div className="flex-1" />
+          <AccountMenu
+            name={user?.fullName || DEMO_CONFIG.user.name}
+            email={user?.primaryEmailAddress?.emailAddress || DEMO_CONFIG.user.email}
+            imageUrl={user?.imageUrl}
+            onLogout={handleLogout}
+          />
         </AppShellHeader>
         <AppShellContent>
           {children}
@@ -431,15 +483,6 @@ function IntegrationsPage() {
   );
 }
 
-function BillingPage() {
-  return (
-    <ComingSoon
-      title="Billing"
-      description="Manage your subscription, payment methods, and invoices."
-    />
-  );
-}
-
 function NotFoundPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
@@ -461,6 +504,16 @@ function NotFoundPage() {
 function Router() {
   return (
     <Switch>
+      {import.meta.env.DEV && (
+        <Route path="/mock/competitor-empty-range">
+          <CompetitorRangeMock />
+        </Route>
+      )}
+
+      <Route path="/onboarding">
+        <OnboardingPage />
+      </Route>
+
       {/* Auth Routes - No sidebar */}
       <Route path="/">
         <AuthLayout>
@@ -473,7 +526,7 @@ function Router() {
                 card: "shadow-sm rounded-2xl",
                 headerTitle: "text-figma-xl font-semibold",
                 headerSubtitle: "text-figma-sm text-figma-secondary",
-                formButtonPrimary: "bg-primary hover:bg-primary/90",
+                formButtonPrimary: "bg-primary hover:opacity-90",
               },
             }}
           />
@@ -484,13 +537,13 @@ function Router() {
           <SignUp
             routing="hash"
             signInUrl="/"
-            forceRedirectUrl="/app/dashboard"
+            forceRedirectUrl="/onboarding"
             appearance={{
               elements: {
                 card: "shadow-sm rounded-2xl",
                 headerTitle: "text-figma-xl font-semibold",
                 headerSubtitle: "text-figma-sm text-figma-secondary",
-                formButtonPrimary: "bg-primary hover:bg-primary/90",
+                formButtonPrimary: "bg-primary hover:opacity-90",
               },
             }}
           />
@@ -542,9 +595,6 @@ function Router() {
       </Route>
       <Route path="/app/settings/integrations">
         <AppLayout><IntegrationsPage /></AppLayout>
-      </Route>
-      <Route path="/app/settings/billing">
-        <AppLayout><BillingPage /></AppLayout>
       </Route>
       {/* Default settings route redirects to brand setup */}
       <Route path="/app/settings">

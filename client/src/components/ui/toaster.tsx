@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { pauseToast, resumeToast, useToast } from "@/hooks/use-toast";
 
 export function Toaster() {
   const { toasts, dismiss } = useToast();
@@ -14,6 +14,8 @@ export function Toaster() {
             role={item.variant === "destructive" ? "alert" : "status"}
             initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
+            onMouseEnter={() => pauseToast(item.id)}
+            onMouseLeave={() => resumeToast(item.id)}
             className={`relative flex items-start gap-3 rounded-xl border p-4 shadow-lg ${item.variant === "destructive" ? "border-red-200 bg-red-50 text-red-950" : item.variant === "warning" ? "border-amber-200 bg-amber-50 text-amber-950" : "border-gray-200 bg-white text-gray-950"}`}
           >
             <div className="min-w-0 flex-1 space-y-1">

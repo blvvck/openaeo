@@ -33,7 +33,7 @@ export function PageHeader({
         responsive
           ? 'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between'
           : 'flex items-center justify-between',
-        'mb-8',
+        'mb-8 py-1',
         className,
       )}
     >
@@ -41,7 +41,7 @@ export function PageHeader({
         <h1 className="text-h1 font-semibold text-figma-primary tracking-tight">
           {title}
         </h1>
-        <p className="text-figma-sm text-figma-secondary mt-0.5">
+        <p className="text-figma-sm text-figma-secondary mt-1">
           {subtitle}
         </p>
       </div>

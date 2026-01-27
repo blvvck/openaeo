@@ -6,6 +6,8 @@
 
 import { Router, type Request, type Response } from 'express';
 import { storage } from '../data';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { prismaRoot } from '../prisma';
 import { getActiveBrandConfig } from '../services/brand-config';
 import {
   calculateVisibilityScore,
@@ -307,6 +309,11 @@ router.get('/trends', async (req: Request, res: Response) => {
     // PERF: Use SQL aggregation instead of fetching all records
     const intervalType = (interval === 'week' ? 'week' : interval === 'month' ? 'month' : 'day') as 'day' | 'week' | 'month';
     const trendCounts = await storage.getTrendCounts(fromDate, toDate, intervalType);
+    const workspaceId = currentWorkspaceId();
+    const historicalResponseCount = workspaceId
+      ? await prismaRoot.responses.count({ where: { workspace_id: workspaceId } })
+      : 0;
+    const hasDataInRange = trendCounts.some(({ total }) => total > 0);
 
     // Convert to TrendDataPoint format
     const dataPoints: TrendDataPoint[] = trendCounts.map(({ date, total, mentions }) => {
@@ -371,6 +378,8 @@ router.get('/trends', async (req: Request, res: Response) => {
       dataPoints,
       annotations,
       byPlatform,
+      hasHistoricalData: historicalResponseCount > 0,
+      hasDataInRange,
     };
 
     res.json(response);

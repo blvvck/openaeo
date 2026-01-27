@@ -57,12 +57,24 @@ const SelectLabel = React.forwardRef<
 ));
 SelectLabel.displayName = "SelectLabel";
 
+type SelectItemProps = React.ComponentPropsWithoutRef<typeof SelectBase.Item> & {
+  indicatorPosition?: "left" | "right";
+};
+
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectBase.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectBase.Item>
->(({ className, children, ...props }, ref) => (
-  <SelectBase.Item ref={ref} className={cn("relative flex w-full cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50", className)} {...props}>
-    <span className="absolute left-2 grid size-4 place-items-center"><SelectBase.ItemIndicator><Check className="size-4" /></SelectBase.ItemIndicator></span>
+  SelectItemProps
+>(({ className, children, indicatorPosition = "left", ...props }, ref) => (
+  <SelectBase.Item
+    ref={ref}
+    className={cn(
+      "relative flex w-full cursor-default select-none items-center rounded-md py-1.5 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      indicatorPosition === "left" ? "pl-8 pr-2" : "pl-2 pr-8",
+      className,
+    )}
+    {...props}
+  >
+    <span className={cn("absolute grid size-4 place-items-center", indicatorPosition === "left" ? "left-2" : "right-2")}><SelectBase.ItemIndicator><Check className="size-4" /></SelectBase.ItemIndicator></span>
     <SelectBase.ItemText>{children}</SelectBase.ItemText>
   </SelectBase.Item>
 ));

@@ -1,11 +1,13 @@
 import type { InsertPrompt, TopicVisibilityMetric, CompetitorVisibilityMetric, CitationSourceMetric, Analytics, Prompt } from "@shared/schema";
-import { AI_PLATFORMS } from "@shared/types/platforms";
 import { storage } from "../../data";
-import { currentWorkspaceId } from "../../context/workspace-context";
+import { currentPrismaTransaction, currentWorkspaceId, runInWorkspaceTransaction } from "../../context/workspace-context";
+import { prismaRoot } from "../../prisma";
 import { domainFromUrl, extractUrls, profileBrandWebsite } from "../site-intelligence/site-profiler";
 import { identifyCompetitorsInText, generateTopicPrompts, suggestBrandTopics } from "../ai/brand-research";
 import { PlatformRouter } from "../platforms/router";
-import type { PlatformName, PlatformResponse } from "../platforms/types";
+import type { PlatformResponse } from "../platforms/types";
+import { getActiveBrandConfig } from "../brand-config";
+import { getPriorityManager } from "../refresh/priority-manager";
 
 export interface AnalysisProgress {
   status: "initializing" | "scraping" | "generating_prompts" | "testing_prompts" | "analyzing" | "complete" | "error";
@@ -57,6 +59,12 @@ export class BrandMonitor {
     this.progressCallback?.(this.progress);
   }
 
+  private withWorkspaceData<T>(operation: () => Promise<T>): Promise<T> {
+    if (currentPrismaTransaction()) return operation();
+    if (!this.workspaceId) return Promise.reject(new Error("Workspace context is required for data access"));
+    return runInWorkspaceTransaction(prismaRoot, this.workspaceId, operation);
+  }
+
   async runFullAnalysis(
     useExistingPrompts = false,
     savedPrompts?: Prompt[],
@@ -72,11 +80,16 @@ export class BrandMonitor {
     const topicCount = Math.max(1, Math.min(20, settings?.numberOfTopics || 5));
 
     try {
+      if (!this.brandName) {
+        this.brandName = (await this.withWorkspaceData(() => getActiveBrandConfig()))?.name || "";
+      }
+
       let promptQueue: Array<{ prompt: Prompt | null; text: string; topicId: number | null }> = [];
       if (savedPrompts?.length) {
         promptQueue = savedPrompts.map((prompt) => ({ prompt, text: prompt.text, topicId: prompt.topicId }));
       } else if (useExistingPrompts) {
-        promptQueue = (await storage.getPrompts()).map((prompt) => ({ prompt, text: prompt.text, topicId: prompt.topicId }));
+        const prompts = await this.withWorkspaceData(() => storage.getPrompts());
+        promptQueue = prompts.map((prompt) => ({ prompt, text: prompt.text, topicId: prompt.topicId }));
       } else {
         if (!this.websiteUrl) throw new Error("A public brand website URL is required to create an analysis.");
         this.report({ status: "scraping", message: "Reading the public brand website…", progress: 8 });
@@ -85,8 +98,10 @@ export class BrandMonitor {
         this.report({ status: "generating_prompts", message: "Finding customer topics and questions…", progress: 18 });
         const topics = await suggestBrandTopics(profile, topicCount);
         for (const topic of topics) {
-          let stored = (await storage.getTopics()).find((candidate) => candidate.name.toLowerCase() === topic.name.toLowerCase());
-          if (!stored) stored = await storage.createTopic(topic);
+          const stored = await this.withWorkspaceData(async () => {
+            const existing = (await storage.getTopics()).find((candidate) => candidate.name.toLowerCase() === topic.name.toLowerCase());
+            return existing || storage.createTopic(topic);
+          });
           const questions = await generateTopicPrompts(topic.name, topic.description, promptsPerTopic);
           promptQueue.push(...questions.map((text) => ({ prompt: null, text, topicId: stored!.id })));
         }
@@ -107,23 +122,51 @@ export class BrandMonitor {
           this.report({ status: "error", message: "Analysis cancelled.", progress: completed / promptQueue.length * 100 });
           return;
         }
+        let prompt = item.prompt;
         try {
-          const prompt = item.prompt || await storage.createPrompt({ text: item.text, topicId: item.topicId });
+          prompt = prompt || await this.withWorkspaceData(() => storage.createPrompt({ text: item.text, topicId: item.topicId }));
+          if (!prompt) throw new Error("Prompt could not be loaded");
+          const trackedPrompt = prompt;
           const run = await PlatformRouter.analyzePromptAcrossPlatforms(item.text);
-          for (const result of Object.values(run.results)) {
-            await storage.logScrapeAttempt({
-              promptId: prompt.id,
-              platform: result.platform,
-              method: result.method,
-              success: result.success,
-              cost: result.cost,
-              errorType: result.error,
+          const successfulResponses = Object.values(run.results).filter((response) => response.success);
+          const competitorNamesByPlatform = new Map<PlatformResponse, string[]>();
+          if (process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR) {
+            for (const response of successfulResponses) {
+              try {
+                competitorNamesByPlatform.set(response, await identifyCompetitorsInText(response.text, this.brandName));
+              } catch (error) {
+                console.warn("Competitor extraction was unavailable for this response.", error);
+                competitorNamesByPlatform.set(response, []);
+              }
+            }
+
+          }
+          await this.withWorkspaceData(async () => {
+            for (const result of Object.values(run.results)) {
+              await storage.logScrapeAttempt({
+                promptId: trackedPrompt.id,
+                platform: result.platform,
+                method: result.method,
+                success: result.success,
+                cost: result.cost,
+                errorType: result.error,
+              });
+            }
+            for (const response of successfulResponses) {
+              await this.persistResponse(trackedPrompt.id, item.text, response, competitorNamesByPlatform.get(response) || []);
+            }
+            if (successfulResponses.length) {
+              await getPriorityManager().markRefreshed(trackedPrompt.id);
+            } else {
+              await getPriorityManager().markAttempted(trackedPrompt.id);
+            }
+          });
+        } catch (error) {
+          if (prompt) {
+            await this.withWorkspaceData(() => getPriorityManager().markAttempted(prompt!.id)).catch(markError => {
+              console.warn("Failed to record prompt attempt.", markError);
             });
           }
-
-          const response = this.selectResponse(run.results);
-          if (response) await this.persistResponse(prompt.id, item.text, response);
-        } catch (error) {
           console.warn("Prompt collection failed; continuing with the next prompt.", error);
         }
         completed++;
@@ -144,20 +187,8 @@ export class BrandMonitor {
     }
   }
 
-  private selectResponse(results: Record<PlatformName, PlatformResponse>): PlatformResponse | undefined {
-    const preferred = AI_PLATFORMS.map((platform) => platform.id as PlatformName);
-    for (const name of preferred) if (results[name]?.success) return results[name];
-    return Object.values(results).find((result) => result.success);
-  }
-
-  private async persistResponse(promptId: number, promptText: string, response: PlatformResponse): Promise<void> {
+  private async persistResponse(promptId: number, promptText: string, response: PlatformResponse, competitorNames: string[]): Promise<void> {
     const mentioned = this.brandName ? response.text.toLocaleLowerCase().includes(this.brandName.toLocaleLowerCase()) : false;
-    let competitorNames: string[] = [];
-    if (process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY_ENV_VAR) {
-      try { competitorNames = await identifyCompetitorsInText(response.text, this.brandName); }
-      catch (error) { console.warn("Competitor extraction was unavailable for this response.", error); }
-    }
-
     const sources = Array.from(new Set([
       ...response.citations.map((citation) => citation.url),
       ...extractUrls(response.text),

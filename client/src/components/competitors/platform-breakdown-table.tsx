@@ -17,19 +17,19 @@ export function PlatformBreakdownTable({
     <div className={cn('w-full', className)}>
       {/* Table Header */}
       <div className="grid grid-cols-[120px_1fr_1fr_60px_80px] gap-3 px-2 pb-3 border-b border-figma-border-light">
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
-          PLATFORM
+        <span className="text-figma-2xs font-medium text-figma-secondary">
+          Platform
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
+        <span className="text-figma-2xs font-medium text-figma-secondary">
           #1
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
+        <span className="text-figma-2xs font-medium text-figma-secondary">
           #2
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
-          YOU
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
+          You
         </span>
-        <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
+        <span className="text-figma-2xs font-medium text-figma-secondary text-right">
           GAP TO #1
         </span>
       </div>

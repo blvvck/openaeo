@@ -207,7 +207,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       {/* Recent mentions preview - shows when available (future API) */}
       {data.recentMentions && data.recentMentions.length > 0 && (
         <div className="mt-4 pt-4 border-t border-gray-100/80 dark:border-gray-800/60">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2.5">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wider mb-2.5">
             Recent mentions
           </p>
           <div className="space-y-2">
@@ -234,7 +234,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       {/* Placeholder for recent mentions when not available */}
       {(!data.recentMentions || data.recentMentions.length === 0) && (
         <div className="mt-4 pt-4 border-t border-gray-100/80 dark:border-gray-800/60">
-          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+          <p className="text-xs font-medium text-gray-400 dark:text-gray-500 tracking-wider mb-2">
             Recent mentions
           </p>
           <p className="text-xs text-gray-300 dark:text-gray-600 italic">

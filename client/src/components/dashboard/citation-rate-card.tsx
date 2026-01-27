@@ -23,6 +23,7 @@ interface CitationRateCardProps {
     sources: CategorizedCitationSources;
     onClick?: () => void;
     className?: string;
+    noPeriodData?: boolean;
 }
 
 /**
@@ -42,6 +43,7 @@ export function CitationRateCard({
     sources,
     onClick,
     className,
+    noPeriodData = false,
 }: CitationRateCardProps) {
     // Use default if sources is undefined
     const safeSource = sources || EMPTY_SOURCES;
@@ -53,7 +55,12 @@ export function CitationRateCard({
         { name: 'Social', percentage: safeSource.social.percentage, color: CATEGORY_COLORS.social },
     ].filter(d => d.percentage > 0);
 
-    const hasData = chartData.length > 0;
+    const hasData = !noPeriodData && chartData.length > 0;
+    const sourceGroups = [
+        { label: 'Own', color: CATEGORY_COLORS.owned, percentage: safeSource.owned.percentage, sites: safeSource.owned.sites },
+        { label: '3rd', color: CATEGORY_COLORS.thirdParty, percentage: safeSource.thirdParty.percentage, sites: safeSource.thirdParty.sites },
+        { label: 'Social', color: CATEGORY_COLORS.social, percentage: safeSource.social.percentage, sites: safeSource.social.sites },
+    ];
 
     return (
         <MetricCard onClick={onClick} className={className}>
@@ -74,7 +81,7 @@ export function CitationRateCard({
                 </TooltipProvider>
             </div>
 
-            <StatMetric value={rate} trend={trend} valueSuffix="%" />
+            <StatMetric value={noPeriodData ? '—' : rate} trend={trend} valueSuffix="%" />
 
             <CardSubtitle>of responses cite you</CardSubtitle>
 
@@ -109,63 +116,50 @@ export function CitationRateCard({
                     )}
                 </div>
 
-                {/* Three columns: Owned | Third-party | Social (scroll for Social) */}
-                <div className="flex-1 overflow-x-auto scrollbar-hover min-w-0">
-                    <div className="flex gap-4 min-w-max">
-                        {/* Owned column */}
-                        <div className="w-[72px] shrink-0">
-                            <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS.owned }} />
-                                <span className="text-figma-2xs font-medium text-figma-secondary">Own</span>
-                                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                                    {hasData ? `${safeSource.owned.percentage}%` : '—%'}
-                                </span>
+                <div className="flex flex-1 min-w-0 flex-col">
+                    {noPeriodData ? (
+                        <>
+                            <div className="overflow-x-auto scrollbar-hover">
+                                <div className="flex min-w-max gap-4">
+                                    {sourceGroups.map((source) => (
+                                        <div key={source.label} className="w-[72px] shrink-0">
+                                            <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
+                                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
+                                                <span className="text-figma-2xs font-medium text-figma-secondary">{source.label}</span>
+                                                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">—%</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="space-y-0.5">
-                                {Array.from({ length: 4 }).map((_, i) => (
-                                    <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                                        {safeSource.owned.sites[i] || '—'}
-                                    </p>
+                            <div className="flex min-h-[100px] items-center justify-center px-2 text-center text-figma-2xs text-figma-muted">
+                                No results in this period
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 overflow-x-auto scrollbar-hover">
+                            <div className="flex min-w-max gap-4">
+                                {sourceGroups.map((source) => (
+                                    <div key={source.label} className="w-[72px] shrink-0">
+                                    <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
+                                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
+                                        <span className="text-figma-2xs font-medium text-figma-secondary">{source.label}</span>
+                                        <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
+                                            {hasData ? `${source.percentage}%` : '—%'}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                        {Array.from({ length: 4 }).map((_, index) => (
+                                            <p key={index} className="text-figma-2xs text-figma-muted truncate">
+                                                {source.sites[index] || '—'}
+                                            </p>
+                                        ))}
+                                    </div>
+                                </div>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Third-party column */}
-                        <div className="w-[72px] shrink-0">
-                            <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS.thirdParty }} />
-                                <span className="text-figma-2xs font-medium text-figma-secondary">3rd</span>
-                                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                                    {hasData ? `${safeSource.thirdParty.percentage}%` : '—%'}
-                                </span>
-                            </div>
-                            <div className="space-y-0.5">
-                                {Array.from({ length: 4 }).map((_, i) => (
-                                    <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                                        {safeSource.thirdParty.sites[i] || '—'}
-                                    </p>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Social column (scroll to reveal) */}
-                        <div className="w-[72px] shrink-0">
-                            <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS.social }} />
-                                <span className="text-figma-2xs font-medium text-figma-secondary">Social</span>
-                                <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                                    {hasData ? `${safeSource.social.percentage}%` : '—%'}
-                                </span>
-                            </div>
-                            <div className="space-y-0.5">
-                                {Array.from({ length: 4 }).map((_, i) => (
-                                    <p key={i} className="text-figma-2xs text-figma-muted truncate">
-                                        {safeSource.social.sites[i] || '—'}
-                                    </p>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </MetricCard>

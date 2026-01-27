@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils';
 import { ContentCard } from '@/components/shared';
+import { CardEmptyState } from '@/components/shared/empty-state';
+import { Search } from 'lucide-react';
 import { SentimentBadge } from '@/components/shared';
 import { TableHeader } from '@/components/shared';
 import { PlatformIcon } from '@/components/ui/platform-icon';
@@ -21,6 +23,8 @@ interface CitationSourcesCardProps {
     subtitle?: string;
     /** Click handler for "View all" */
     onClick?: () => void;
+    noPeriodData?: boolean;
+    onAdjustDateRange?: () => void;
     /** Additional classes */
     className?: string;
 }
@@ -32,6 +36,8 @@ export function CitationSourcesCard({
     sources,
     subtitle,
     onClick,
+    noPeriodData,
+    onAdjustDateRange,
     className,
 }: CitationSourcesCardProps) {
     return (
@@ -42,15 +48,24 @@ export function CitationSourcesCard({
             contentClassName="flex-1 pt-3 px-5 pb-4"
             className={className}
         >
+            {noPeriodData ? (
+                <CardEmptyState
+                    icon={Search}
+                    title="No results in this period"
+                    description="Change the date range to view results from another period."
+                    action={onAdjustDateRange ? { label: 'Adjust date filter', onClick: onAdjustDateRange } : undefined}
+                    className="min-h-[280px]"
+                />
+            ) : <>
             <div className="w-full">
                 {/* Table Headers */}
                 <TableHeader
                     gridCols={TABLE_GRID}
                     columns={[
-                        { label: 'SOURCE' },
-                        { label: 'PLATFORMS' },
-                        { label: 'CITATIONS', align: 'right' },
-                        { label: 'SENTIMENT', align: 'right' },
+                        { label: 'Source' },
+                        { label: 'Platforms' },
+                        { label: 'Citations', align: 'right' },
+                        { label: 'Sentiment', align: 'right' },
                     ]}
                 />
 
@@ -152,6 +167,7 @@ export function CitationSourcesCard({
                     </div>
                 </TooltipProvider>
             </div>
+            </>}
         </ContentCard>
     );
 }
@@ -169,10 +185,10 @@ export function CitationSourcesCardSkeleton() {
                 <TableHeader
                     gridCols={TABLE_GRID}
                     columns={[
-                        { label: 'SOURCE' },
-                        { label: 'PLATFORMS' },
-                        { label: 'CITATIONS', align: 'right' },
-                        { label: 'SENTIMENT', align: 'right' },
+                        { label: 'Source' },
+                        { label: 'Platforms' },
+                        { label: 'Citations', align: 'right' },
+                        { label: 'Sentiment', align: 'right' },
                     ]}
                 />
 

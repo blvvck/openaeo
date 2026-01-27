@@ -131,7 +131,7 @@ export default {
       },
       colors: {
         /* === SEMANTIC BACKGROUND TOKENS === */
-        background: "var(--background)",
+        background: "rgb(var(--background-channels) / <alpha-value>)",
         "background-elevated": "var(--background-elevated)",
         "background-muted": "var(--background-muted)",
         "background-subtle": "var(--background-subtle)",
@@ -143,13 +143,13 @@ export default {
         "text-disabled": "var(--text-disabled)",
 
         /* === BORDER TOKENS === */
-        border: "var(--border)",
+        border: "rgb(var(--border-channels) / <alpha-value>)",
         "border-muted": "var(--border-muted)",
         "border-focus": "var(--border-focus)",
 
         /* === SEMANTIC STATUS COLORS === */
         success: {
-          DEFAULT: "var(--success)",
+          DEFAULT: "rgb(var(--success-channels) / <alpha-value>)",
           muted: "var(--success-muted)",
           50: "var(--success-50)",
           100: "var(--success-100)",
@@ -163,7 +163,7 @@ export default {
           900: "var(--success-900)",
         },
         warning: {
-          DEFAULT: "var(--warning)",
+          DEFAULT: "rgb(var(--warning-channels) / <alpha-value>)",
           muted: "var(--warning-muted)",
           50: "var(--warning-50)",
           100: "var(--warning-100)",
@@ -191,7 +191,7 @@ export default {
           900: "var(--error-900)",
         },
         info: {
-          DEFAULT: "var(--info)",
+          DEFAULT: "rgb(var(--info-channels) / <alpha-value>)",
           muted: "var(--info-muted)",
         },
 
@@ -215,7 +215,7 @@ export default {
           800: "var(--primary-800)",
           900: "var(--primary-900)",
           950: "var(--primary-950)",
-          DEFAULT: "var(--primary)",
+          DEFAULT: "rgb(var(--primary-channels) / <alpha-value>)",
           foreground: "var(--primary-foreground)",
         },
         accent: {
@@ -230,7 +230,7 @@ export default {
           800: "var(--accent-800)",
           900: "var(--accent-900)",
           950: "var(--accent-950)",
-          DEFAULT: "var(--accent)",
+          DEFAULT: "rgb(var(--accent-channels) / <alpha-value>)",
           foreground: "var(--accent-foreground)",
           primary: "var(--accent-primary)",
           "primary-hover": "var(--accent-primary-hover)",
@@ -252,7 +252,7 @@ export default {
         },
 
         /* === COMPONENT SEMANTIC COLORS === */
-        foreground: "var(--foreground)",
+        foreground: "rgb(var(--foreground-channels) / <alpha-value>)",
         card: {
           DEFAULT: "var(--card)",
           foreground: "var(--card-foreground)",
@@ -266,11 +266,11 @@ export default {
           foreground: "var(--secondary-foreground)",
         },
         muted: {
-          DEFAULT: "var(--muted)",
+          DEFAULT: "rgb(var(--muted-channels) / <alpha-value>)",
           foreground: "var(--muted-foreground)",
         },
         destructive: {
-          DEFAULT: "var(--destructive)",
+          DEFAULT: "rgb(var(--destructive-channels) / <alpha-value>)",
           foreground: "var(--destructive-foreground)",
         },
         input: "var(--input)",
@@ -311,23 +311,23 @@ export default {
         /* === FIGMA ALIGNMENT === */
         figma: {
           /* Text colors */
-          primary: "var(--figma-text-primary)",       /* #111827 - titles, emphasis */
+          primary: "rgb(var(--figma-text-primary-channels) / <alpha-value>)",       /* #111827 - titles, emphasis */
           secondary: "var(--figma-text-secondary)",   /* #6B7380 - labels, names */
-          muted: "var(--figma-text-muted)",           /* #9CA3B0 - subtitles, counts */
+          muted: "rgb(var(--figma-text-muted-channels) / <alpha-value>)",           /* #9CA3B0 - subtitles, counts */
           tertiary: "var(--figma-text-tertiary)",     /* #D1D6DB - divider chars */
 
           /* Border colors */
           border: "var(--figma-border)",              /* #E5E7EB - card borders */
-          "border-light": "var(--figma-border-light)",/* #E8EAED - light dividers */
+          "border-light": "rgb(var(--figma-border-light-channels) / <alpha-value>)",/* #E8EAED - light dividers */
 
           /* Background colors */
-          hover: "var(--figma-bg-hover)",             /* #F9FAFB - row hover */
+          hover: "rgb(var(--figma-bg-hover-channels) / <alpha-value>)",             /* #F9FAFB - row hover */
           "bar-track": "var(--figma-bar-track)",      /* #F2F5F7 - progress bar track */
-          card: "var(--figma-bg-card)",               /* #FFFFFF - card bg */
+          card: "rgb(var(--figma-bg-card-channels) / <alpha-value>)",               /* #FFFFFF - card bg */
 
           /* Accent colors */
-          blue: "var(--figma-blue)",                  /* #2462EB - primary action */
-          "blue-light": "var(--figma-blue-light)",    /* #EEF6FF - blue bg */
+          blue: "rgb(var(--figma-blue-channels) / <alpha-value>)",                  /* #2462EB - primary action */
+          "blue-light": "rgb(var(--figma-blue-light-channels) / <alpha-value>)",    /* #EEF6FF - blue bg */
 
           /* Trend colors */
           "trend-up": "var(--figma-trend-up)",        /* #17A34A - positive */

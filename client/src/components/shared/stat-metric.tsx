@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { ArrowUpRight } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 // ============================================================================
 // StatMetric — Hero number + trend for Row 1 cards
@@ -138,3 +139,66 @@ export function CardDivider({ variant = 'default', className }: CardDividerProps
 }
 
 export default StatMetric;
+
+
+// ============================================================================
+// MetricStatCard — Compact stat card: label, hero value, optional subtitle
+// ============================================================================
+
+interface MetricStatCardProps {
+    label: string;
+    value: string | number;
+    trend?: number;
+    subtitle?: string;
+    onClick?: () => void;
+    className?: string;
+}
+
+export function MetricStatCard({
+    label,
+    value,
+    trend,
+    subtitle,
+    onClick,
+    className,
+}: MetricStatCardProps) {
+    return (
+        <Card
+            onClick={onClick}
+            className={cn(
+                'border-figma-border rounded-xl bg-white',
+                onClick && 'cursor-pointer hover:shadow-md transition-shadow',
+                className,
+            )}
+        >
+            <CardContent className="p-5">
+                <CardLabel>{label}</CardLabel>
+                <StatMetric value={value} trend={trend ?? 0} />
+                {subtitle && <CardSubtitle>{subtitle}</CardSubtitle>}
+            </CardContent>
+        </Card>
+    );
+}
+
+// ============================================================================
+// MetricListScroller — Fixed header above a scrollable list
+// ============================================================================
+
+interface MetricListScrollerProps {
+    header: React.ReactNode;
+    children: React.ReactNode;
+    className?: string;
+}
+
+export function MetricListScroller({ header, children, className }: MetricListScrollerProps) {
+    return (
+        <div className={cn('flex min-h-0 flex-1 flex-col', className)}>
+            <div className="mb-1.5 border-b border-figma-border-light pb-1.5">
+                {header}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-none">
+                {children}
+            </div>
+        </div>
+    );
+}

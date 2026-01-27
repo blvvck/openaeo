@@ -27,10 +27,10 @@ export function CompetitorComparisonCard({
       <TableHeader
         gridCols="grid-cols-[1fr_60px_80px_80px_60px]"
         columns={[
-          { label: 'BRAND' },
-          { label: 'SCORE', align: 'right' },
-          { label: 'MENTIONS', align: 'right' },
-          { label: 'SENTIMENT', align: 'right' },
+          { label: 'Brand' },
+          { label: 'Score', align: 'right' },
+          { label: 'Mentions', align: 'right' },
+          { label: 'Sentiment', align: 'right' },
           { label: '\u0394 YOU', align: 'right' },
         ]}
       />

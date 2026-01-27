@@ -123,7 +123,7 @@ export function CompetitorDetailModal({
           {/* Current Metrics (if tracked) */}
           {competitor.score > 0 && (
             <div className="pt-4 border-t border-figma-border-light">
-              <p className="text-figma-2xs font-medium text-figma-secondary uppercase mb-3">
+              <p className="text-figma-2xs font-medium text-figma-secondary mb-3">
                 Current Performance
               </p>
               <div className="grid grid-cols-2 gap-4">

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
-import { DEMO_CONFIG } from '@/config/app';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
 import { formatRankBadge } from '@/lib/formatters';
 
 // UI Components
@@ -78,11 +78,36 @@ import {
 // API Hooks
 // ============================================================================
 
+function emptyVisibilityOverview(): VisibilityOverviewResponse {
+  return {
+    score: 0,
+    previousScore: 0,
+    trend: 0,
+    trendDirection: 'stable',
+    breakdown: {
+      mentionCount: 0,
+      mentionsTrend: 0,
+      citationRate: 0,
+      citationRateTrend: 0,
+      sentimentBonus: 0,
+      sentimentTrend: 'stable',
+      sentimentBreakdown: { positive: 0, neutral: 0, negative: 0 },
+      platformDiversity: { active: 0, total: 0 },
+    },
+    platforms: [],
+    whatChanged: [],
+    topContent: [],
+    relatedInsights: [],
+    meta: { lastUpdated: '', dataFreshness: 'live' },
+  };
+}
+
 function useVisibilityOverview(timeRange: TimeRangePreset) {
   return useQuery<VisibilityOverviewResponse>({
     queryKey: ['visibility', 'overview', timeRange],
     queryFn: async () => {
       const res = await fetch(`/api/visibility/overview?timeRange=${timeRange}`);
+      if (res.status === 404) return emptyVisibilityOverview();
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load visibility data');
@@ -349,13 +374,14 @@ function OverviewTab({
           title={`Top prompts mentioning ${brandName}`}
           actionLabel="View all prompts"
           onAction={() => onNavigate('/app/prompts')}
+          contentClassName="pt-0"
         >
           {/* Table Header with info tooltips */}
           <TooltipProvider delayDuration={200}>
-            <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-figma-border-light bg-figma-hover rounded-t-lg">
+            <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-figma-border-light">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-4 text-figma-2xs font-medium text-figma-secondary uppercase cursor-help inline-flex items-center gap-1">
+                  <span className="col-span-4 text-figma-2xs font-medium text-figma-secondary cursor-help inline-flex items-center gap-1">
                     Prompt <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -365,7 +391,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-2 text-figma-2xs font-medium text-figma-secondary uppercase cursor-help inline-flex items-center gap-1">
+                  <span className="col-span-2 text-figma-2xs font-medium text-figma-secondary cursor-help inline-flex items-center gap-1">
                     Topic <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -375,7 +401,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary uppercase cursor-help inline-flex items-center gap-1">
+                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary cursor-help inline-flex items-center gap-1">
                     Mentions <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -385,7 +411,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help inline-flex items-center justify-end gap-1">
+                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary text-right cursor-help inline-flex items-center justify-end gap-1">
                     Citations <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -395,7 +421,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help inline-flex items-center justify-end gap-1">
+                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary text-right cursor-help inline-flex items-center justify-end gap-1">
                     Position <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -405,7 +431,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-2 text-figma-2xs font-medium text-figma-secondary uppercase pl-4 cursor-help inline-flex items-center gap-1">
+                  <span className="col-span-2 text-figma-2xs font-medium text-figma-secondary pl-4 cursor-help inline-flex items-center gap-1">
                     Competitors <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -415,7 +441,7 @@ function OverviewTab({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary uppercase text-right cursor-help inline-flex items-center justify-end gap-1">
+                  <span className="col-span-1 text-figma-2xs font-medium text-figma-secondary text-right cursor-help inline-flex items-center justify-end gap-1">
                     Stage <HelpCircle className="w-3 h-3 text-figma-muted" />
                   </span>
                 </TooltipTrigger>
@@ -646,7 +672,7 @@ function OverviewTab({
       />
 
       {/* 1G. Data Freshness Footer */}
-      {data.meta && (
+      {data.meta?.lastUpdated && (
         <div className="flex items-center justify-end gap-2 text-figma-xs text-figma-muted">
           <span>
             Last updated: {new Date(data.meta.lastUpdated).toLocaleString()}
@@ -681,6 +707,7 @@ export function VisibilityPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { range, setRange } = useTimeRange('30d');
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const timeRangePreset = range.preset as TimeRangePreset;
 
   // Get initial tab from URL or default to 'overview'
@@ -688,8 +715,7 @@ export function VisibilityPage() {
   const initialTab = urlParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
 
-  // Brand name
-  const brandName = DEMO_CONFIG.brandName;
+  const brandName = useActiveWorkspaceName();
 
   // Data fetching
   const {
@@ -791,7 +817,12 @@ export function VisibilityPage() {
                 <span className="text-figma-xs">Updating...</span>
               </div>
             )}
-            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+            <TimeRangeSelector
+              value={range}
+              onChange={handleTimeRangeChange}
+              open={dateFilterOpen}
+              onOpenChange={setDateFilterOpen}
+            />
           </div>
         }
       />
@@ -831,6 +862,7 @@ export function VisibilityPage() {
           <ByPlatformTab
             timeRange={timeRangePreset}
             brandName={brandName}
+            onAdjustDateRange={() => setDateFilterOpen(true)}
           />
         </TabsContent>
 

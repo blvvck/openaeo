@@ -7,7 +7,21 @@ import { runInWorkspaceTransaction } from "../context/workspace-context";
 const LEGACY_OWNER_ID = "openaeo-legacy-owner";
 const LEGACY_WORKSPACE_SLUG = "openaeo-legacy";
 
+const WORKSPACE_RESOLUTION_TTL_MS = 30_000;
+const workspaceResolutionCache = new Map<string, { resolvedAt: number; workspaces: Awaited<ReturnType<typeof resolveWorkspaceForUser>> }>();
+
 async function getOrCreateWorkspace(userId: string) {
+  const cached = workspaceResolutionCache.get(userId);
+  if (cached && Date.now() - cached.resolvedAt < WORKSPACE_RESOLUTION_TTL_MS) {
+    return cached.workspaces;
+  }
+
+  const workspaces = await resolveWorkspaceForUser(userId);
+  workspaceResolutionCache.set(userId, { resolvedAt: Date.now(), workspaces });
+  return workspaces;
+}
+
+async function resolveWorkspaceForUser(userId: string) {
   const clerkUser = await clerkClient.users.getUser(userId);
   const primaryEmail = clerkUser.emailAddresses.find(
     (email) => email.id === clerkUser.primaryEmailAddressId,
@@ -35,7 +49,7 @@ async function getOrCreateWorkspace(userId: string) {
   if (legacyWorkspace) {
     const claimed = await prisma.workspaces.updateMany({
       where: { id: legacyWorkspace.id, owner_id: LEGACY_OWNER_ID },
-      data: { owner_id: userId, name: "OpenAEO Workspace", updated_at: new Date() },
+      data: { owner_id: userId, updated_at: new Date() },
     });
 
     if (claimed.count) {
@@ -56,7 +70,7 @@ async function getOrCreateWorkspace(userId: string) {
   const slug = `ws-${createHash("sha256").update(userId).digest("hex").slice(0, 20)}`;
   const workspace = await prisma.workspaces.upsert({
     where: { slug },
-    create: { name: `${clerkUser.firstName || "My"} Workspace`, slug, owner_id: userId, plan: "free" },
+    create: { name: clerkUser.firstName || "My organization", slug, owner_id: userId, plan: "free" },
     update: {},
   });
 
@@ -86,7 +100,13 @@ export async function workspaceContextMiddleware(
   }
 
   try {
+    const resolveStartedAt = Date.now();
     const workspaces = await getOrCreateWorkspace(userId);
+    const resolveMs = Date.now() - resolveStartedAt;
+    if (resolveMs > 40) {
+      console.info(`[perf] workspace resolve ${resolveMs}ms ${req.method} ${req.originalUrl}`);
+    }
+
     const requestedWorkspaceId = req.header("x-workspace-id");
     const workspace = requestedWorkspaceId
       ? workspaces.find((candidate) => candidate.id === requestedWorkspaceId)

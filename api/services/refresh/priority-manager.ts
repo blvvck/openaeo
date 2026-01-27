@@ -56,9 +56,20 @@ export class PriorityManager {
 
     const result = await prisma.prompts.updateMany({
       where: { id: promptId, workspace_id: requireWorkspaceId() },
-      data: { last_refreshed_at: new Date(), refresh_count: currentCount + 1 },
+      data: {
+        last_attempted_at: new Date(),
+        last_refreshed_at: new Date(),
+        refresh_count: currentCount + 1,
+      },
     });
     return result.count ? this.getPromptById(promptId) : undefined;
+  }
+
+  async markAttempted(promptId: number): Promise<void> {
+    await prisma.prompts.updateMany({
+      where: { id: promptId, workspace_id: requireWorkspaceId() },
+      data: { last_attempted_at: new Date() },
+    });
   }
 
   /**

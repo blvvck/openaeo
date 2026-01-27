@@ -247,6 +247,8 @@ export interface TrendsResponse {
   annotations: TrendAnnotation[];
   /** Per-platform daily/weekly/monthly data for multi-line chart */
   byPlatform?: PlatformTrendSeries;
+  hasHistoricalData?: boolean;
+  hasDataInRange?: boolean;
 }
 
 // =============================================================================

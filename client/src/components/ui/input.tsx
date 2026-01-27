@@ -22,7 +22,7 @@ type InputVariantOptions = { size?: InputSize; variant?: InputVariant; hasCounte
 
 function inputVariants({ size = "default", variant = "default", hasCounter = false, className }: InputVariantOptions = {}) {
   return cn(
-    "flex w-full rounded-md border bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-200 autofill:bg-background autofill:text-foreground [&:-webkit-autofill]:bg-background [&:-webkit-autofill]:text-foreground [&:-webkit-autofill]:shadow-[0_0_0px_1000px_hsl(var(--background))_inset] [&:-webkit-autofill]:[--webkit-text-fill-color:hsl(var(--foreground))] md:text-sm",
+    "flex w-full rounded-md border bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-figma-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-200 autofill:bg-background autofill:text-foreground [&:-webkit-autofill]:bg-background [&:-webkit-autofill]:text-foreground [&:-webkit-autofill]:shadow-[0_0_0px_1000px_hsl(var(--background))_inset] [&:-webkit-autofill]:[--webkit-text-fill-color:hsl(var(--foreground))] md:text-sm",
     inputSizeStyles[size],
     inputVariantStyles[variant],
     hasCounter && "pr-16",

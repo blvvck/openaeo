@@ -25,15 +25,22 @@
  * - Drawer shows: sentiment by platform, citations (tabbed), competitors, related prompts
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import { DEMO_CONFIG } from '@/config/app';
+import { workspaceFetch } from '@/lib/workspace-query';
+import { useToast } from '@/hooks/use-toast';
 
 // UI Components
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/multiline-field';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/option-picker';
+import { FilterBar, FilterSelect, FilterSearch } from '@/components/shared/filter-bar';
+import { CardEmptyState } from '@/components/shared/empty-state';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tab-set';
 import {
   DropdownMenu,
@@ -71,6 +78,10 @@ import {
   useTrendingPrompts,
   useTopics,
   usePromptDetail,
+  usePromptTrackingFrequency,
+  useSavePromptTrackingFrequency,
+  useRunPromptsNow,
+  type PromptTrackingFrequency,
 } from '@/hooks/use-prompts';
 
 // Types
@@ -99,6 +110,7 @@ import {
   FileText,
   Star,
   Loader2,
+  Plus,
 } from 'lucide-react';
 
 // =============================================================================
@@ -127,6 +139,20 @@ const SENTIMENT_SHORT_LABELS: Record<Sentiment, string> = {
   neutral: 'Neu',
   negative: 'Neg',
   mixed: 'Mix',
+};
+
+const TRACKING_FREQUENCY_LABELS: Record<PromptTrackingFrequency, string> = {
+  daily: 'Daily',
+  '7d': '7 days',
+  '14d': '14 days',
+  '30d': '30 days',
+};
+
+const TRACKING_BUTTON_LABELS: Record<PromptTrackingFrequency, string> = {
+  daily: 'Daily tracking',
+  '7d': 'Weekly tracking',
+  '14d': 'Bi-weekly tracking',
+  '30d': 'Monthly tracking',
 };
 
 // =============================================================================
@@ -225,33 +251,42 @@ function TopPromptsCard({
 }) {
   return (
     <ContentCard title="Top prompts" subtitle="Highest brand mentions" onAction={onViewAll}>
-      <div className="space-y-0">
-        {prompts.slice(0, 5).map((prompt, index) => (
-          <div
-            key={prompt.id}
-            className="py-2.5 border-b border-figma-border-light last:border-0"
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-figma-xs font-medium text-figma-muted tabular-nums w-4 shrink-0 mt-0.5">
-                {index + 1}.
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-figma-sm text-figma-primary leading-snug">"{prompt.text}"</p>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-figma-xs text-figma-muted tabular-nums">
-                    {prompt.mentions} mentions
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {prompt.platforms.slice(0, 4).map((pId) => (
-                      <PlatformIcon key={pId} platform={pId} size="xs" />
-                    ))}
+      {prompts.length === 0 ? (
+        <CardEmptyState
+          icon={MessageSquare}
+          title="No top prompts yet"
+          description="Prompts with brand mentions will appear here when data is available."
+          className="py-8"
+        />
+      ) : (
+        <div className="space-y-0">
+          {prompts.slice(0, 5).map((prompt, index) => (
+            <div
+              key={prompt.id}
+              className="py-2.5 border-b border-figma-border-light last:border-0"
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-figma-xs font-medium text-figma-muted tabular-nums w-4 shrink-0 mt-0.5">
+                  {index + 1}.
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-figma-sm text-figma-primary leading-snug">"{prompt.text}"</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-figma-xs text-figma-muted tabular-nums">
+                      {prompt.mentions} mentions
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {prompt.platforms.slice(0, 4).map((pId) => (
+                        <PlatformIcon key={pId} platform={pId} size="xs" />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </ContentCard>
   );
 }
@@ -268,33 +303,42 @@ function TrendingPromptsCard({
 }) {
   return (
     <ContentCard title="Trending prompts" subtitle="Fastest growing this period" onAction={onViewAll}>
-      <div className="space-y-0">
-        {prompts.slice(0, 5).map((prompt) => (
-          <div
-            key={prompt.id}
-            className="py-2.5 border-b border-figma-border-light last:border-0"
-          >
-            <div className="flex items-start gap-3">
-              <span className="text-figma-xs font-medium text-figma-trend-up shrink-0 mt-0.5">
-                +{prompt.trend}%
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="text-figma-sm text-figma-primary leading-snug">"{prompt.text}"</p>
-                <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-figma-xs text-figma-muted tabular-nums">
-                    {prompt.mentions} mentions
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {prompt.platforms.slice(0, 4).map((pId) => (
-                      <PlatformIcon key={pId} platform={pId} size="xs" />
-                    ))}
+      {prompts.length === 0 ? (
+        <CardEmptyState
+          icon={TrendingUp}
+          title="No trending prompts yet"
+          description="Prompts with rising brand mentions will appear here."
+          className="py-8"
+        />
+      ) : (
+        <div className="space-y-0">
+          {prompts.slice(0, 5).map((prompt) => (
+            <div
+              key={prompt.id}
+              className="py-2.5 border-b border-figma-border-light last:border-0"
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-figma-xs font-medium text-figma-trend-up shrink-0 mt-0.5">
+                  +{prompt.trend}%
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-figma-sm text-figma-primary leading-snug">"{prompt.text}"</p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-figma-xs text-figma-muted tabular-nums">
+                      {prompt.mentions} mentions
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {prompt.platforms.slice(0, 4).map((pId) => (
+                        <PlatformIcon key={pId} platform={pId} size="xs" />
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </ContentCard>
   );
 }
@@ -336,68 +380,47 @@ function PromptsTable({
       title={title}
       subtitle={`${total} prompts found`}
       headerRight={
-        <div className="flex items-center gap-3">
-          {/* Topic Filter */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="text-figma-sm">
-                {selectedTopic ? topics.find(t => t.id === selectedTopic)?.name : 'All topics'}
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onTopicChange(null)}>All topics</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {topics.map((topic) => (
-                <DropdownMenuItem key={topic.id} onClick={() => onTopicChange(topic.id)}>
-                  {topic.name} ({topic.promptCount})
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-figma-muted" />
-            <Input
-              placeholder="Search prompts..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-9 w-[200px] text-figma-sm"
-            />
-          </div>
-        </div>
+        <FilterBar>
+          <FilterSearch
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder="Search prompts..."
+            className="w-[200px]"
+          />
+          <FilterSelect
+            value={selectedTopic ?? 'all'}
+            onValueChange={(v) => onTopicChange(v === 'all' ? null : v)}
+            options={[
+              { value: 'all', label: 'All topics' },
+              ...topics.map((topic) => ({ value: topic.id, label: `${topic.name} (${topic.promptCount})` })),
+            ]}
+          />
+        </FilterBar>
       }
     >
       {prompts.length === 0 ? (
-        <div className="py-12 text-center">
-          <Search className="w-10 h-10 text-figma-muted mx-auto mb-3" />
-          <p className="text-figma-sm font-medium text-figma-primary">No prompts found</p>
-          <p className="text-figma-xs text-figma-secondary mt-1">
-            Try adjusting your search or filters
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
+        <CardEmptyState
+          icon={Search}
+          title="No prompts found"
+          description="Try adjusting your search or filters"
+          action={{
+            label: 'Clear all filters',
+            onClick: () => {
               onSearchChange('');
               onTopicChange(null);
-            }}
-            className="mt-3 text-figma-blue"
-          >
-            Clear all filters
-          </Button>
-        </div>
+            },
+          }}
+        />
       ) : (
         <>
           <TableHeader
             gridCols="grid-cols-[1fr_90px_100px_80px_70px]"
             columns={[
-              { label: 'PROMPT' },
-              { label: 'STAGE' },
-              { label: 'PLATFORMS' },
-              { label: 'SENTIMENT' },
-              { label: 'MENTIONS', align: 'right' },
+              { label: 'Prompt' },
+              { label: 'Stage' },
+              { label: 'Platforms' },
+              { label: 'Sentiment' },
+              { label: 'Mentions', align: 'right' },
             ]}
           />
           <div className="space-y-0">
@@ -815,11 +838,44 @@ function CitationList({
 // Main Page Component
 // =============================================================================
 
+function PromptFrequencySelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: PromptTrackingFrequency;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger aria-label="Prompt tracking frequency" className="h-9 w-auto min-w-fit justify-start gap-3 whitespace-nowrap border-figma-border bg-figma-card text-figma-sm font-medium text-figma-primary shadow-sm">
+        <SelectValue>{TRACKING_BUTTON_LABELS[value]}</SelectValue>
+      </SelectTrigger>
+      <SelectContent align="end">
+        <SelectItem value="now" indicatorPosition="right">Run now</SelectItem>
+        <SelectSeparator />
+        {(Object.keys(TRACKING_FREQUENCY_LABELS) as PromptTrackingFrequency[]).map((frequency) => (
+          <SelectItem key={frequency} value={frequency} indicatorPosition="right">
+            {TRACKING_BUTTON_LABELS[frequency]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function PromptsPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { range, setRange } = useTimeRange('30d');
   const timeRangePreset = range.preset as TimeRangePreset;
+  const { data: trackingFrequencyData } = usePromptTrackingFrequency();
+  const saveTrackingFrequency = useSavePromptTrackingFrequency();
+  const runPromptsNow = useRunPromptsNow();
+  const trackingFrequency = trackingFrequencyData?.frequency ?? 'daily';
 
   // Get initial tab from URL or default to 'all'
   const urlParams = new URLSearchParams(search);
@@ -827,10 +883,21 @@ export function PromptsPage() {
 
   // State
   const [activeTab, setActiveTab] = useState<BuyerJourneyStage | 'all'>(initialTab);
-  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(() => urlParams.get('topic'));
+  const [searchQuery, setSearchQuery] = useState(() => urlParams.get('search') ?? '');
   const [offset, setOffset] = useState(0);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+  const [isAddPromptOpen, setIsAddPromptOpen] = useState(false);
+  const [newPromptText, setNewPromptText] = useState('');
+  const [newPromptStage, setNewPromptStage] = useState<BuyerJourneyStage>('comparing');
+  const [isAddingPrompt, setIsAddingPrompt] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    setSearchQuery(params.get('search') ?? '');
+    setSelectedTopic(params.get('topic'));
+    setOffset(0);
+  }, [search]);
 
   // Data fetching
   const {
@@ -906,6 +973,107 @@ export function PromptsPage() {
     refetchFunnel();
   };
 
+  const handleTrackingFrequencyChange = (value: string) => {
+    if (value === 'now') {
+      runPromptsNow.mutate(undefined, {
+        onSuccess: ({ queuedPrompts }) => toast({
+          title: queuedPrompts ? 'Refresh started' : 'No prompts to refresh',
+          description: queuedPrompts
+            ? `Refreshing ${queuedPrompts} tracked ${queuedPrompts === 1 ? 'prompt' : 'prompts'} across your configured AI platforms.`
+            : 'Add a prompt to tracking before running a refresh.',
+        }),
+        onError: (error) => toast({
+          title: 'Could not start refresh',
+          description: error instanceof Error ? error.message : 'Try again in a moment.',
+          variant: 'warning',
+        }),
+      });
+      return;
+    }
+
+    saveTrackingFrequency.mutate(value as PromptTrackingFrequency, {
+      onSuccess: ({ frequency, queuedPrompts, nextRunAt }) => {
+        const nextRun = nextRunAt
+          ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(nextRunAt))
+          : null;
+        const nextRunIsDue = nextRunAt !== null && new Date(nextRunAt).getTime() <= Date.now();
+        const frequencyLabel = TRACKING_BUTTON_LABELS[frequency].toLowerCase();
+        toast({
+          title: 'Tracking frequency updated',
+          description: queuedPrompts > 0
+            ? `A fresh scan is queued now for ${queuedPrompts} due ${queuedPrompts === 1 ? 'prompt' : 'prompts'}. After this scan, prompts will be checked on your ${frequencyLabel} schedule.`
+            : nextRun
+              ? nextRunIsDue
+                ? `Your next scan is due now and will start after the current refresh finishes. Prompts will then be checked on your ${frequencyLabel} schedule.`
+                : `Your next scan is due around ${nextRun}. After each scan, prompts will be checked on your ${frequencyLabel} schedule.`
+              : 'Frequency saved. Add a prompt to schedule its first scan.',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Could not update tracking frequency',
+          description: 'Try again in a moment.',
+          variant: 'warning',
+        });
+      },
+    });
+  };
+
+  const handleOpenAddPrompt = () => {
+    setNewPromptStage(activeTab === 'all' ? 'comparing' : activeTab);
+    setIsAddPromptOpen(true);
+  };
+
+  const handleAddPrompt = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = newPromptText.trim();
+    if (!text || isAddingPrompt) return;
+
+    setIsAddingPrompt(true);
+    try {
+      const response = await workspaceFetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, journeyStages: [newPromptStage] }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message = typeof payload?.message === 'string'
+          ? payload.message
+          : typeof payload?.error === 'string'
+            ? payload.error
+            : 'Try again in a moment.';
+        throw new Error(message);
+      }
+      const addedPrompt = await response.json() as {
+        trackingQueued?: boolean;
+        frequency?: PromptTrackingFrequency;
+      };
+
+      handleTabChange(newPromptStage);
+      setSelectedTopic(null);
+      setSearchQuery(text);
+      setOffset(0);
+      await queryClient.invalidateQueries({ queryKey: ['discovery'] });
+      setIsAddPromptOpen(false);
+      setNewPromptText('');
+      toast({
+        title: 'Prompt added to tracking',
+        description: addedPrompt.trackingQueued
+          ? `A fresh AI scan is queued. Future scans follow your ${TRACKING_BUTTON_LABELS[addedPrompt.frequency ?? trackingFrequency].toLowerCase()} schedule.`
+          : 'It will be scanned when the current run finishes.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Could not add prompt',
+        description: error instanceof Error ? error.message : 'Try again in a moment.',
+        variant: 'warning',
+      });
+    } finally {
+      setIsAddingPrompt(false);
+    }
+  };
+
   // Computed
   const isLoading = funnelLoading || promptsLoading;
   const isRefreshing = funnelFetching && !funnelLoading;
@@ -919,7 +1087,16 @@ export function PromptsPage() {
         <PageHeader
           title="Prompts & Topics"
           subtitle="Understand what questions drive AI visibility"
-          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} />}
+          action={(
+            <div className="flex items-center gap-3">
+              <PromptFrequencySelect
+                value={trackingFrequency}
+                disabled={saveTrackingFrequency.isPending || runPromptsNow.isPending}
+                onChange={handleTrackingFrequencyChange}
+              />
+              <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+            </div>
+          )}
         />
         <ErrorState
           title="Couldn't load prompts data"
@@ -944,6 +1121,15 @@ export function PromptsPage() {
                 <span className="text-figma-xs">Updating...</span>
               </div>
             )}
+            <Button variant="outline" onClick={handleOpenAddPrompt}>
+              <Plus className="w-4 h-4" />
+              Add prompt
+            </Button>
+            <PromptFrequencySelect
+              value={trackingFrequency}
+              disabled={saveTrackingFrequency.isPending || runPromptsNow.isPending}
+              onChange={handleTrackingFrequencyChange}
+            />
             <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
           </div>
         }
@@ -1024,6 +1210,78 @@ export function PromptsPage() {
         isLoading={detailLoading}
         onNavigateToPrompt={(id) => setSelectedPromptId(id)}
       />
+
+      <Dialog open={isAddPromptOpen} onOpenChange={setIsAddPromptOpen}>
+        <DialogContent>
+          <form onSubmit={handleAddPrompt}>
+            <DialogHeader>
+              <DialogTitle>Add a prompt</DialogTitle>
+              <DialogDescription>
+                We’ll scan it across your AI platforms now, then continue on your tracking schedule.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-5 space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="new-prompt-text" className="text-figma-xs font-medium text-figma-secondary">
+                  Prompt or question
+                </label>
+                <Textarea
+                  id="new-prompt-text"
+                  value={newPromptText}
+                  onChange={(event) => setNewPromptText(event.target.value)}
+                  placeholder="For example, what is the best CRM for a small business?"
+                  maxLength={500}
+                  rows={4}
+                  required
+                  disabled={isAddingPrompt}
+                  className="resize-none text-figma-sm"
+                />
+                <p className="text-right text-figma-xs text-figma-muted tabular-nums">
+                  {newPromptText.length}/500
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="new-prompt-stage" className="text-figma-xs font-medium text-figma-secondary">
+                  Buyer journey stage
+                </label>
+                <Select
+                  value={newPromptStage}
+                  onValueChange={(value) => setNewPromptStage(value as BuyerJourneyStage)}
+                  disabled={isAddingPrompt}
+                >
+                  <SelectTrigger id="new-prompt-stage" className="text-figma-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JOURNEY_STAGES.filter((stage) => stage.id !== 'all').map((stage) => (
+                      <SelectItem key={stage.id} value={stage.id} className="text-figma-sm">
+                        {stage.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsAddPromptOpen(false)}
+                disabled={isAddingPrompt}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!newPromptText.trim() || isAddingPrompt}>
+                {isAddingPrompt && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isAddingPrompt ? 'Saving…' : 'Save prompt'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

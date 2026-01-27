@@ -12,7 +12,8 @@
  * - GET /api/discovery/trending — Trending prompts
  */
 
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { workspaceFetch } from '@/lib/workspace-query';
 import type {
   FunnelCoverageResponse,
   PromptsResponse,
@@ -23,6 +24,51 @@ import type {
   Sentiment,
   TimeRangePreset,
 } from '@shared/types';
+
+export type PromptTrackingFrequency = 'daily' | '7d' | '14d' | '30d';
+
+export function usePromptTrackingFrequency() {
+  return useQuery<{ frequency: PromptTrackingFrequency }>({
+    queryKey: ['prompt-tracking-frequency'],
+    queryFn: async () => {
+      const response = await workspaceFetch('/api/prompts/tracking-frequency');
+      if (!response.ok) throw new Error('Failed to load tracking frequency');
+      return response.json();
+    },
+    staleTime: Infinity,
+  });
+}
+
+export function useSavePromptTrackingFrequency() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (frequency: PromptTrackingFrequency) => {
+      const response = await workspaceFetch('/api/prompts/tracking-frequency', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ frequency }),
+      });
+      if (!response.ok) throw new Error('Failed to update tracking frequency');
+      return response.json() as Promise<{ frequency: PromptTrackingFrequency; queuedPrompts: number; nextRunAt: string | null }>;
+    },
+    onSuccess: ({ frequency }) => {
+      queryClient.setQueryData(['prompt-tracking-frequency'], { frequency });
+    },
+  });
+}
+
+export function useRunPromptsNow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await workspaceFetch('/api/prompts/run-now', { method: 'POST' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error ?? 'Could not start prompt refresh');
+      return payload as { queuedPrompts: number };
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['discovery'] }),
+  });
+}
 
 // =============================================================================
 // Mock Data Generators
@@ -410,16 +456,13 @@ export function useFunnelCoverage(timeRange: TimeRangePreset) {
   return useQuery<FunnelCoverageResponse>({
     queryKey: ['discovery', 'funnel-coverage', timeRange],
     queryFn: async () => {
-      // TODO: Wire to GET /api/discovery/overview when ready
-      // const res = await fetch(`/api/discovery/overview?timeRange=${timeRange}`);
-      // if (!res.ok) throw new Error('Failed to load funnel coverage');
-      // return res.json();
-
-      // Mock data for now
-      await new Promise(r => setTimeout(r, 500));
-      return generateMockFunnelCoverage();
+      const res = await workspaceFetch(`/api/discovery/overview?timeRange=${timeRange}`);
+      if (!res.ok) throw new Error('Failed to load funnel coverage');
+      return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -444,20 +487,21 @@ export function usePrompts(params: {
   return useQuery<PromptsResponse>({
     queryKey: ['discovery', 'prompts', timeRange, stage, topic, search, sentiment, limit, offset, sortBy, sortDir],
     queryFn: async () => {
-      // TODO: Wire to GET /api/discovery/prompts when ready
-      // const queryParams = new URLSearchParams({ timeRange, limit: String(limit), offset: String(offset) });
-      // if (stage) queryParams.set('stage', stage);
-      // if (topic) queryParams.set('topic', topic);
-      // if (search) queryParams.set('search', search);
-      // const res = await fetch(`/api/discovery/prompts?${queryParams}`);
-      // if (!res.ok) throw new Error('Failed to load prompts');
-      // return res.json();
+      const queryParams = new URLSearchParams({ timeRange, limit: String(limit), offset: String(offset) });
+      if (stage) queryParams.set('stage', stage);
+      if (topic) queryParams.set('topic', topic);
+      if (search) queryParams.set('search', search);
+      if (sentiment) queryParams.set('sentiment', sentiment);
+      if (sortBy) queryParams.set('sortBy', sortBy);
+      if (sortDir) queryParams.set('sortDir', sortDir);
 
-      // Mock data for now
-      await new Promise(r => setTimeout(r, 300));
-      return generateMockPrompts(stage, topic, search, limit, offset);
+      const res = await workspaceFetch(`/api/discovery/prompts?${queryParams.toString()}`);
+      if (!res.ok) throw new Error('Failed to load prompts');
+      return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -470,11 +514,13 @@ export function useTrendingPrompts(timeRange: TimeRangePreset) {
   return useQuery<TrendingPromptsResponse>({
     queryKey: ['discovery', 'trending', timeRange],
     queryFn: async () => {
-      // TODO: Wire to GET /api/discovery/trending when ready
-      await new Promise(r => setTimeout(r, 400));
-      return generateMockTrendingPrompts();
+      const res = await workspaceFetch(`/api/discovery/trending?timeRange=${timeRange}`);
+      if (!res.ok) throw new Error('Failed to load trending prompts');
+      return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -487,9 +533,9 @@ export function useTopics() {
   return useQuery<TopicsResponse>({
     queryKey: ['discovery', 'topics'],
     queryFn: async () => {
-      // TODO: Wire to GET /api/discovery/topics when ready
-      await new Promise(r => setTimeout(r, 200));
-      return generateMockTopics();
+      const res = await workspaceFetch('/api/discovery/topics');
+      if (!res.ok) throw new Error('Failed to load topics');
+      return res.json();
     },
     staleTime: 10 * 60 * 1000,
     retry: 2,
@@ -505,9 +551,9 @@ export function usePromptDetail(promptId: string | null) {
     queryFn: async () => {
       if (!promptId) throw new Error('No prompt selected');
 
-      // TODO: Wire to GET /api/discovery/prompts/:id when ready
-      await new Promise(r => setTimeout(r, 300));
-      return generateMockPromptDetail(promptId);
+      const res = await workspaceFetch(`/api/discovery/prompts/${encodeURIComponent(promptId)}`);
+      if (!res.ok) throw new Error('Failed to load prompt detail');
+      return res.json();
     },
     enabled: !!promptId,
     staleTime: 5 * 60 * 1000,

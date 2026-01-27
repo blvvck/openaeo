@@ -2,21 +2,68 @@ import { Router } from "express";
 import { storage } from "../data";
 import { insertPromptSchema } from "@shared/schema";
 import { z } from "zod";
+import { currentWorkspaceId } from "../context/workspace-context";
+import { getNextPromptRunAt, getPromptFrequency, PROMPT_FREQUENCIES, queueDuePromptRun, scheduleDuePromptRun, updatePromptFrequency } from "../services/prompts/prompt-tracking";
 
 const router = Router();
+
+router.post("/run-now", async (_req, res) => {
+    try {
+        const workspaceId = currentWorkspaceId();
+        if (!workspaceId) return res.status(400).json({ error: "Workspace is required" });
+        const prompts = (await storage.getPrompts()).filter(prompt => !prompt.archivedAt);
+        if (!prompts.length) return res.json({ queuedPrompts: 0 });
+
+        const queuedPrompts = await queueDuePromptRun(workspaceId, prompts.map(prompt => prompt.id));
+        if (!queuedPrompts) return res.status(409).json({ error: "A prompt refresh is already in progress." });
+        res.status(202).json({ queuedPrompts });
+    } catch (error) {
+        console.error("Error starting prompt refresh:", error);
+        res.status(500).json({ error: "Failed to start prompt refresh" });
+    }
+});
 
 // Create a new prompt (manual)
 router.post("/", async (req, res) => {
     try {
         const data = insertPromptSchema.parse(req.body);
         const prompt = await storage.createPrompt(data);
-        res.status(201).json(prompt);
+        const workspaceId = currentWorkspaceId();
+        const frequency = await getPromptFrequency();
+        res.status(201).json({ ...prompt, trackingQueued: Boolean(workspaceId), frequency });
+        if (workspaceId) scheduleDuePromptRun(workspaceId, [prompt.id]);
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
         }
         console.error("Error creating prompt:", error);
         res.status(500).json({ error: "Failed to create prompt" });
+    }
+});
+
+router.get("/tracking-frequency", async (_req, res) => {
+    try {
+        res.json({ frequency: await getPromptFrequency() });
+    } catch (error) {
+        console.error("Error fetching prompt tracking frequency:", error);
+        res.status(500).json({ error: "Failed to fetch prompt tracking frequency" });
+    }
+});
+
+router.put("/tracking-frequency", async (req, res) => {
+    try {
+        const parsed = z.object({ frequency: z.enum(PROMPT_FREQUENCIES) }).safeParse(req.body);
+        if (!parsed.success) {
+            return res.status(400).json({ error: "Frequency must be daily, 7d, 14d, or 30d" });
+        }
+        await updatePromptFrequency(parsed.data.frequency);
+        const workspaceId = currentWorkspaceId();
+        const queuedPrompts = workspaceId ? await queueDuePromptRun(workspaceId) : 0;
+        const nextRunAt = workspaceId ? await getNextPromptRunAt(parsed.data.frequency) : null;
+        res.json({ frequency: parsed.data.frequency, queuedPrompts, nextRunAt });
+    } catch (error) {
+        console.error("Error updating prompt tracking frequency:", error);
+        res.status(500).json({ error: "Failed to update prompt tracking frequency" });
     }
 });
 

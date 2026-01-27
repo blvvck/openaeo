@@ -5,10 +5,12 @@ import { registerRoutes } from "./routes";
 import { mountFrontend, log } from "./frontend-host";
 import { workspaceContextMiddleware } from "./middleware/workspace-context";
 import { assertTenantSafeDatabaseRole } from "./prisma";
+import { startPromptTrackingScheduler } from "./services/prompts/prompt-tracking";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(recordApiRequest);
 app.use("/api", clerkMiddleware({
   publishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY,
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -16,12 +18,14 @@ app.use("/api", clerkMiddleware({
 app.use("/api", workspaceContextMiddleware);
 
 function recordApiRequest(request: Request, response: Response, next: NextFunction) {
+  const requestPath = request.originalUrl;
   const startedAt = process.hrtime.bigint();
+
   response.once("finish", () => {
-    if (!request.path.startsWith("/api")) return;
+    if (!requestPath.startsWith("/api")) return;
 
     const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
-    log(`${request.method} ${response.statusCode} ${request.path} ${elapsedMs.toFixed(0)}ms`, "http");
+    log(`${request.method} ${response.statusCode} ${requestPath} ${elapsedMs.toFixed(0)}ms`, "http");
   });
   next();
 }
@@ -50,7 +54,7 @@ async function startApplication() {
   const serverHost = process.env.HOST || (process.env.NODE_ENV === "production" ? "0.0.0.0" : "localhost");
   httpServer.listen(serverPort, serverHost);
   httpServer.once("listening", () => log(`OpenAEO listening at ${serverHost}:${serverPort}`, "http"));
+  startPromptTrackingScheduler();
 }
 
-app.use(recordApiRequest);
 void startApplication();

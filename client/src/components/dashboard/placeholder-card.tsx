@@ -121,7 +121,7 @@ export function CitationSourcesPlaceholder({ onClick }: { onClick?: () => void }
     >
       <div className="w-full space-y-3">
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs text-muted-foreground/60 font-medium uppercase tracking-wider px-1">
+        <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs text-muted-foreground/60 font-medium tracking-wider px-1">
           <span>Source</span>
           <span className="text-right">Citations</span>
           <span className="text-right">Sentiment</span>
@@ -188,7 +188,7 @@ export function TrendingTopicsPlaceholder({ onClick }: { onClick?: () => void })
     >
       <div className="w-full space-y-3">
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs text-muted-foreground/60 font-medium uppercase tracking-wider px-1">
+        <div className="grid grid-cols-[1fr_80px_80px] gap-2 text-xs text-muted-foreground/60 font-medium tracking-wider px-1">
           <span>Topic</span>
           <span className="text-right">Volume</span>
           <span className="text-right">Your rank</span>

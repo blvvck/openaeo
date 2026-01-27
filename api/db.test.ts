@@ -132,7 +132,7 @@ describe('queryWithTiming', () => {
 describe('Pool Configuration', () => {
   it('should define correct environment variable names', () => {
     // These tests verify the expected env vars are documented
-    // In production, these would be set by Railway/infrastructure
+    // In production, these are set by the deployment environment
     const expectedEnvVars = [
       'DATABASE_URL',
       'DB_POOL_MAX',

@@ -242,6 +242,8 @@ export interface CompetitorTrendsResponse {
   }>;
   timeRange: string;
   interval: 'day' | 'week' | 'month';
+  hasHistoricalData: boolean;
+  hasDataInRange: boolean;
 }
 
 /**

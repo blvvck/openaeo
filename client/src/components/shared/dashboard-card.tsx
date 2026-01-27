@@ -52,7 +52,7 @@ export function ContentCard({
             'flex flex-col border-figma-border rounded-xl bg-figma-card min-w-0 overflow-hidden',
             className
         )}>
-            <CardHeader className="pb-3 pt-5 px-5 select-none">
+            <CardHeader className="pb-4 pt-6 px-5 select-none">
                 <div className="flex items-center justify-between">
                     <div>
                         <span className="block text-figma-md font-semibold text-figma-primary leading-tight">

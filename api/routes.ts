@@ -30,10 +30,11 @@ import logosRoutes from "./routes/logos";
 import discoveryRoutes from "./routes/discovery";
 import citationsRoutes from "./routes/citations";
 import siteHealthRoutes from "./routes/site-health";
+import searchRoutes from "./routes/search";
 import cdnWebhooksRoutes from "./routes/webhooks/cdn";
 import { getPriorityManager } from "./services/refresh/priority-manager";
 import { getRefreshHistoryService } from "./services/refresh/refresh-history";
-import { currentWorkspaceId, runInWorkspaceTransaction } from "./context/workspace-context";
+import { currentWorkspaceId, runInWorkspace } from "./context/workspace-context";
 import { prismaRoot } from "./prisma";
 import { getAuth } from "@clerk/express";
 import type { Prompt } from "@shared/schema";
@@ -49,12 +50,6 @@ function withApiFailure(message: string, handle: (request: Request, response: Re
       if (!response.headersSent) response.status(500).json({ error: message });
     }
   };
-}
-
-function runWorkspaceTask<T>(task: () => Promise<T>): Promise<T> {
-  const workspaceId = currentWorkspaceId();
-  if (!workspaceId) return Promise.reject(new Error("Workspace context is required for background work"));
-  return runInWorkspaceTransaction(prismaRoot, workspaceId, task);
 }
 
 function progressKey(workspaceId: string, sessionId: string): string {
@@ -73,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       where: { user_id: userId, workspaces: { deleted_at: null } },
       select: {
         role: true,
-        workspaces: { select: { id: true, name: true, slug: true } },
+        workspaces: { select: { id: true, name: true, slug: true, onboarding_completed_at: true } },
       },
       orderBy: { joined_at: "asc" },
     });
@@ -82,6 +77,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       workspaces: memberships.map(({ role, workspaces }) => ({ ...workspaces, role })),
       currentWorkspaceId: currentWorkspaceId(),
     });
+  }));
+
+  app.patch("/api/workspaces/current", withApiFailure("Failed to update workspace", async (request, response) => {
+    const { userId } = getAuth(request);
+    if (!userId) {
+      response.status(401).json({ error: "Authentication required", code: "AUTH_REQUIRED" });
+      return;
+    }
+
+    const requestedName = typeof request.body?.name === "string" ? request.body.name.trim() : "";
+    if (requestedName.length < 2 || requestedName.length > 50) {
+      response.status(400).json({ error: "Organization name must be between 2 and 50 characters" });
+      return;
+    }
+
+    const workspaceId = currentWorkspaceId();
+    if (!workspaceId) {
+      response.status(400).json({ error: "No active workspace for this request" });
+      return;
+    }
+
+    const membership = await prismaRoot.workspace_members.findUnique({
+      where: { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } },
+      select: { role: true },
+    });
+    if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+      response.status(403).json({ error: "Only workspace owners and admins can rename it" });
+      return;
+    }
+
+    const workspace = await prismaRoot.workspaces.update({
+      where: { id: workspaceId },
+      data: { name: requestedName, onboarding_completed_at: new Date(), updated_at: new Date() },
+      select: { id: true, name: true, slug: true, onboarding_completed_at: true },
+    });
+
+    response.json({ workspace });
   }));
 
   // Overview metrics endpoint
@@ -314,12 +346,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const key = progressKey(workspaceId, sessionId);
     const worker = new BrandMonitor((progress) => activeAnalysisRuns.set(key, progress));
     await storage.clearAllResponses();
-    runWorkspaceTask(() => worker.runFullAnalysis(false, allPrompts)).catch((error) => {
-      console.error("Analysis failed:", error);
-      activeAnalysisRuns.set(key, { status: "error", message: error.message, progress: 0 });
-    });
-
     response.status(202).json({ sessionId, promptsCreated: allPrompts.length, status: "queued" });
+    setTimeout(() => {
+      void runInWorkspace(workspaceId, () => worker.runFullAnalysis(false, allPrompts)).catch((error) => {
+        console.error("Analysis failed:", error);
+        activeAnalysisRuns.set(key, { status: "error", message: error.message, progress: 0 });
+      });
+    }, 250);
   }));
 
   app.post("/api/analysis/start", withApiFailure("Could not queue analysis", async (request, response) => {
@@ -333,11 +366,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const analysisWorker = new BrandMonitor((progress) => {
         activeAnalysisRuns.set(key, progress);
       });
-      void runWorkspaceTask(() => analysisWorker.runFullAnalysis(useExistingPrompts, undefined, settings)).catch((error) => {
-        console.error("Analysis failed:", error);
-        activeAnalysisRuns.set(key, { status: "error", message: error.message, progress: 0 });
-      });
-
       const plannedPromptCount = settings?.promptsPerTopic * settings?.numberOfTopics || 100;
       response.status(202).json({
         sessionId,
@@ -345,6 +373,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         promptSource: useExistingPrompts ? "workspace" : "generated",
         plannedPromptCount,
       });
+      setTimeout(() => {
+        void runInWorkspace(workspaceId, () => analysisWorker.runFullAnalysis(useExistingPrompts, undefined, settings)).catch((error) => {
+          console.error("Analysis failed:", error);
+          activeAnalysisRuns.set(key, { status: "error", message: error.message, progress: 0 });
+        });
+      }, 250);
   }));
 
   // Get analysis progress
@@ -490,6 +524,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // =====================================================
   app.use('/api/site-health', siteHealthRoutes);
+
+  app.use('/api/search', searchRoutes);
 
   // =====================================================
   // CDN Webhook Receivers (Cloudflare, Vercel, Netlify)

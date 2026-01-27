@@ -9,7 +9,8 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { DEMO_CONFIG } from '@/config/app';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
+import { useToast } from '@/hooks/use-toast';
 
 import { ProgressBar } from './progress-bar';
 import { EnterUrlStep } from './steps/enter-url-step';
@@ -27,7 +28,12 @@ import type {
   ResearchResults,
 } from './types';
 
-import { LOADING_MESSAGES } from './mock-data';
+import {
+  LOADING_MESSAGES,
+  MOCK_BRAND_PROFILE,
+  MOCK_COMPETITORS,
+  MOCK_PROMPTS,
+} from './mock-data';
 
 // API functions
 async function fetchRecentSearches(): Promise<{ domain: string; date: string }[]> {
@@ -100,6 +106,19 @@ async function fetchPrompts(brand: BrandProfile, competitors: string[]): Promise
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'Failed to generate prompts' }));
     throw new Error(error.error || 'Failed to generate prompts');
+  }
+  return res.json();
+}
+
+async function addTrackedPrompts(prompts: CustomerPrompt[]): Promise<{ addedCount: number; alreadyTrackedCount: number }> {
+  const res = await fetch('/api/intelligence/prompts/track', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompts: prompts.map(({ text, stage }) => ({ text, stage })) }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Failed to add prompts to tracking' }));
+    throw new Error(error.error || 'Failed to add prompts to tracking');
   }
   return res.json();
 }
@@ -270,8 +289,24 @@ export function IntelligenceWizard({
   initialBrandId,
   onComplete,
 }: IntelligenceWizardProps) {
+  const organizationName = useActiveWorkspaceName();
+  const { toast } = useToast();
+  const isMockPromptPreview = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('mockIntelligencePrompts') === '1';
+
   // Initialize from sessionStorage if available
   const [state, setState] = useState<ExtendedWizardState>(() => {
+    if (isMockPromptPreview) {
+      return {
+        ...INITIAL_STATE,
+        currentStep: 'prompts',
+        url: `https://${MOCK_BRAND_PROFILE.domain}`,
+        brand: MOCK_BRAND_PROFILE,
+        competitors: MOCK_COMPETITORS,
+        prompts: MOCK_PROMPTS,
+      };
+    }
+
     const persisted = loadPersistedState();
     return persisted || INITIAL_STATE;
   });
@@ -279,8 +314,9 @@ export function IntelligenceWizard({
 
   // Persist state changes to sessionStorage
   useEffect(() => {
+    if (isMockPromptPreview) return;
     persistState(state);
-  }, [state]);
+  }, [isMockPromptPreview, state]);
 
   // Fetch recent searches from API
   const { data: recentSearches = [] } = useQuery({
@@ -297,6 +333,30 @@ export function IntelligenceWizard({
       queryClient.invalidateQueries({ queryKey: ['intelligence', 'recent-searches'] });
     },
   });
+
+  const handleTrackPrompts = useCallback(async (prompts: CustomerPrompt[]) => {
+    try {
+      if (isMockPromptPreview) {
+        toast({ title: 'Prompts saved to tracking', description: `${prompts.length} added.` });
+        return true;
+      }
+
+      const result = await addTrackedPrompts(prompts);
+      await queryClient.invalidateQueries({ queryKey: ['discovery'] });
+      const detail = result.addedCount > 0
+        ? `${result.addedCount} added${result.alreadyTrackedCount ? `; ${result.alreadyTrackedCount} already tracked` : ''}.`
+        : 'These prompts are already in your tracked list.';
+      toast({ title: 'Prompts saved to tracking', description: detail });
+      return true;
+    } catch (error) {
+      toast({
+        title: 'Could not add prompts to tracking',
+        description: error instanceof Error ? error.message : 'Try again in a moment.',
+        variant: 'warning',
+      });
+      return false;
+    }
+  }, [isMockPromptPreview, queryClient, toast]);
 
   // Loading message rotation
   const loadingMessage = useLoadingMessages(
@@ -506,12 +566,11 @@ export function IntelligenceWizard({
       // Call the research API with all collected data
       const results = await runResearchApi(
         state.brand!,
-        DEMO_CONFIG.brandName, // User's brand for comparison
+        organizationName, // User's brand for comparison
         prompts,
         RESEARCH_PLATFORMS,
         state.competitors
       );
-
       setState((prev) => ({
         ...prev,
         results,
@@ -531,7 +590,7 @@ export function IntelligenceWizard({
         isRunningResearch: false,
       }));
     }
-  }, [state.brand, state.competitors, onComplete]);
+  }, [state.brand, state.competitors, onComplete, queryClient]);
 
   // Navigation
   const handleBack = useCallback(() => {
@@ -631,6 +690,7 @@ export function IntelligenceWizard({
           error={state.error}
           onBack={handleBack}
           onRunResearch={handleRunResearch}
+          onTrackPrompts={handleTrackPrompts}
           onAddPrompt={handleAddPrompt}
           onEditPrompt={handleEditPrompt}
           onRemovePrompt={handleRemovePrompt}
@@ -643,7 +703,7 @@ export function IntelligenceWizard({
           results={state.results}
           onResearchAnother={handleResearchAnother}
           onAddAsCompetitor={handleAddAsCompetitor}
-          userBrandName={DEMO_CONFIG.brandName}
+          userBrandName={organizationName}
           userBrandLogo={`https://img.logo.dev/acme.com?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`}
         />
       )}

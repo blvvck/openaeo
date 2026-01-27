@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Link, useLocation } from "wouter"
 import { cva, type VariantProps } from "class-variance-authority"
-import { ChevronLeft, ChevronRight, PanelLeft, LogOut, Settings, ChevronsUpDown, Building2, UsersRound, CreditCard, Sliders } from "lucide-react"
+import { ChevronLeft, ChevronRight, PanelLeft, LogOut, Settings, ChevronsUpDown, Building2, UsersRound, Sliders } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -171,7 +171,7 @@ const SidebarNavContent = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "flex-1 overflow-y-auto px-3 py-4",
+        "min-h-0 flex-1 overflow-y-auto px-3 py-4",
         // Hide scrollbar by default, show on hover
         "scrollbar-thin scrollbar-track-transparent scrollbar-thumb-transparent",
         "hover:scrollbar-thumb-sidebar-border/50",
@@ -215,7 +215,7 @@ const SidebarNavGroup = React.forwardRef<HTMLDivElement, SidebarNavGroupProps>(
       >
         {label && !isCollapsed && (
           <div className="mb-2 px-3">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-figma-muted">
+            <span className="text-[10px] font-semibold tracking-wide text-figma-muted">
               {label}
             </span>
           </div>
@@ -389,8 +389,6 @@ interface SidebarNavFooterProps extends Omit<React.HTMLAttributes<HTMLDivElement
   email?: string
   /** Team page href */
   teamHref?: string
-  /** Billing page href */
-  billingHref?: string
   /** Preferences page href */
   preferencesHref?: string
   /** Callback when logout is clicked */
@@ -412,7 +410,6 @@ const SidebarNavFooter = React.forwardRef<HTMLDivElement, SidebarNavFooterProps>
       secondaryText,
       email,
       teamHref = "/app/settings/team",
-      billingHref = "/app/settings/billing",
       preferencesHref = "/app/settings/preferences",
       onLogout,
       onSwitchWorkspace,
@@ -512,19 +509,6 @@ const SidebarNavFooter = React.forwardRef<HTMLDivElement, SidebarNavFooterProps>
             >
               <UsersRound className="h-5 w-5 text-figma-secondary" aria-hidden="true" />
               <span className="text-figma-sm">Team</span>
-            </Link>
-          </DropdownMenuItem>
-        )}
-
-        {/* Billing */}
-        {billingHref && (
-          <DropdownMenuItem asChild>
-            <Link
-              href={billingHref}
-              className="flex items-center gap-3 cursor-pointer py-2.5 px-5"
-            >
-              <CreditCard className="h-5 w-5 text-figma-secondary" aria-hidden="true" />
-              <span className="text-figma-sm">Billing</span>
             </Link>
           </DropdownMenuItem>
         )}

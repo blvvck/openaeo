@@ -14,6 +14,9 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
  */
 
 import { useLocation } from 'wouter';
+import { useState } from 'react';
+import { useUser } from '@clerk/react';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import {
   ChevronRight,
@@ -22,6 +25,7 @@ import {
   Telescope,
   Info,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCompact, formatRankBadge } from '@/lib/formatters';
@@ -42,7 +46,7 @@ import { PlatformIcon, PLATFORMS, getPlatformInfo } from '@/components/ui/platfo
 import { TimeRangeSelector, useTimeRange, getPeriodLabel, type TimeRange } from '@/components/charts/time-range-selector';
 import { getSeriesColor } from '@/components/charts/chart-theme';
 import { PlatformPerformanceChart } from '@/components/charts/platform-performance-chart';
-import { ErrorState as SharedErrorState } from '@/components/shared/empty-state';
+import { CardEmptyState, ErrorState as SharedErrorState } from '@/components/shared/empty-state';
 import { OnboardingChecklist, type OnboardingStep } from '@/components/onboarding/onboarding-checklist';
 import { useOnboarding } from '@/hooks/use-onboarding';
 import {
@@ -151,11 +155,11 @@ function WelcomeEmptyState({ onSetupBrand, onTakeTour }: WelcomeEmptyStateProps)
       <div className="mb-6 p-6 bg-primary-100 rounded-full">
         <Telescope className="w-16 h-16 text-primary" />
       </div>
-      <h1 className="text-3xl font-bold mb-2">Welcome to {APP_CONFIG.fullName}</h1>
-      <p className="text-lg text-muted-foreground mb-4">
+      <h1 className="text-figma-lg font-bold mb-2 text-figma-primary">Welcome to {APP_CONFIG.fullName}</h1>
+      <p className="text-figma-base text-figma-secondary mb-4">
         Let&apos;s set up your brand tracking in just a few minutes.
       </p>
-      <div className="text-muted-foreground mb-8 max-w-md">
+      <div className="text-figma-secondary mb-8 max-w-md">
         <p className="mb-2">We&apos;ll help you:</p>
         <ul className="text-left list-disc list-inside space-y-1">
           <li>Track how AI platforms talk about your brand</li>
@@ -171,7 +175,7 @@ function WelcomeEmptyState({ onSetupBrand, onTakeTour }: WelcomeEmptyStateProps)
           Take a quick tour
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground mt-4">Takes about 3 minutes</p>
+      <p className="text-figma-sm text-figma-secondary mt-4">Takes about 3 minutes</p>
     </div>
   );
 }
@@ -183,7 +187,13 @@ function WelcomeEmptyState({ onSetupBrand, onTakeTour }: WelcomeEmptyStateProps)
 
 export function DashboardPage() {
   const [, navigate] = useLocation();
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const { range, setRange } = useTimeRange('7d');
+  const { user } = useUser();
+  const organizationName = useActiveWorkspaceName();
+  const mockEmptyPeriod = import.meta.env.DEV && new URLSearchParams(window.location.search).get('mock') === 'empty-period';
+
+  const firstName = user?.firstName?.trim() || DEMO_CONFIG.user.name.split(' ')[0];
 
   // Data fetching
   const {
@@ -213,12 +223,20 @@ export function DashboardPage() {
     setRange(newRange);
   };
 
+  const handleAdjustDateRange = () => {
+    document.querySelector('main[aria-label="Dashboard"]')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+    setDateFilterOpen(true);
+  };
+
   const handleSetupBrand = () => {
     navigate('/app/settings/brand');
   };
 
   const handleTakeTour = () => {
-    console.log('Start tour');
+    navigate('/app/dashboard');
   };
 
   const handleCompetitorClick = () => {
@@ -271,7 +289,11 @@ export function DashboardPage() {
 
   // Derive data with safe defaults for loading state
   const isPending = dashboardData?.meta?.dataFreshness === 'pending';
-  const displayName = dashboardData?.brandName || DEMO_CONFIG.brandName;
+  const noResultsForRange = mockEmptyPeriod || Boolean(
+    dashboardData?.period?.hasHistoricalData && !dashboardData.period.hasDataInRange
+  );
+  const configuredBrand = dashboardData?.brandName && dashboardData.brandName !== 'Your Brand' ? dashboardData.brandName : null;
+  const displayName = configuredBrand ?? organizationName;
   const competitors = dashboardData?.competitors ?? [];
   const you = competitors.find(c => c.isYou);
   const rankBadge = you ? formatRankBadge(you.rank, competitors.length) : null;
@@ -280,7 +302,7 @@ export function DashboardPage() {
     <main role="main" aria-label="Dashboard" aria-busy={dashboardLoading || undefined}>
       {/* Page Header */}
       <PageHeader
-        title={`Welcome, ${DEMO_CONFIG.user.name.split(' ')[0]}`}
+        title={`Welcome, ${firstName}`}
         subtitle={`Here's how ${displayName} is performing on answer engines`}
         action={
           <div className="flex items-center gap-3">
@@ -293,7 +315,12 @@ export function DashboardPage() {
             {dashboardLoading ? (
               <Skeleton className="h-9 w-32 rounded-lg" />
             ) : (
-              <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+              <TimeRangeSelector
+                value={range}
+                onChange={handleTimeRangeChange}
+                open={dateFilterOpen}
+                onOpenChange={setDateFilterOpen}
+              />
             )}
           </div>
         }
@@ -334,6 +361,7 @@ export function DashboardPage() {
             percentage: dashboardData!.metrics.totalMentions > 0 ? Math.round((p.mentions / dashboardData!.metrics.totalMentions) * 100) : 0,
             count: p.mentions,
           }))}
+          noPeriodData={noResultsForRange}
           onClick={() => navigate('/app/prompts')}
         />
         {(() => {
@@ -344,6 +372,7 @@ export function DashboardPage() {
               rate={citationRate}
               trend={dashboardData!.metrics.mentionsTrend}
               sources={dashboardData!.citationSources}
+              noPeriodData={noResultsForRange}
               onClick={() => navigate('/app/citations')}
             />
           );
@@ -352,6 +381,7 @@ export function DashboardPage() {
           total={formatCompact(dashboardData!.botVisits.total)}
           trend={dashboardData!.botVisits.trend}
           period={getPeriodLabel(range.preset)}
+          noPeriodData={noResultsForRange}
           bots={dashboardData!.botVisits.bots.slice(0, 5).map(b => ({
             id: b.id === 'ai_mode' || b.id === 'ai_overview' ? 'gemini' : b.id,
             name: b.name,
@@ -377,6 +407,8 @@ export function DashboardPage() {
             citations: p.citations,
             sentiment: p.sentiment,
           }))}
+          noPeriodData={noResultsForRange}
+          onAdjustDateRange={handleAdjustDateRange}
           onPlatformClick={handlePlatformClick}
           onClick={() => navigate('/app/visibility')}
         />
@@ -400,7 +432,15 @@ export function DashboardPage() {
           </CardHeader>
           <div className="mx-5 border-b border-figma-border-light" />
           <CardContent className="flex-1 pt-0 px-5 pb-5 overflow-hidden">
-            <CompetitorLeaderboard
+            {noResultsForRange ? (
+              <CardEmptyState
+                icon={Search}
+                title="No rankings for this period"
+                description="Change the date range to view results from another period."
+                action={{ label: 'Adjust date filter', onClick: handleAdjustDateRange }}
+                className="min-h-[280px]"
+              />
+            ) : <CompetitorLeaderboard
               data={isPending ? [] : competitors.map(c => ({
                 rank: c.rank,
                 id: c.id,
@@ -413,7 +453,7 @@ export function DashboardPage() {
               onRowClick={isPending ? undefined : () => handleCompetitorClick()}
               isEmpty={isPending || competitors.length === 0}
               brandName={displayName}
-            />
+            />}
           </CardContent>
         </Card>
       </div>
@@ -424,6 +464,8 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <CitationSourcesCard
           subtitle={dashboardData!.cardSubtitles?.citationSources}
+          noPeriodData={noResultsForRange}
+          onAdjustDateRange={handleAdjustDateRange}
           sources={dashboardData!.citationSourcesList.slice(0, 5).map((s, i) => ({
             id: String(i + 1),
             domain: s.domain,
@@ -445,7 +487,9 @@ export function DashboardPage() {
             text: dashboardData!.sentiment.sampleQuote.text,
             platform: dashboardData!.sentiment.sampleQuote.platform,
             date: new Date(dashboardData!.sentiment.sampleQuote.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          } : { text: 'No quotes available yet', platform: 'N/A', date: '' }}
+          } : { text: 'No quotes available yet', platform: '—', date: '' }}
+          noPeriodData={noResultsForRange}
+          onAdjustDateRange={handleAdjustDateRange}
           onClick={() => navigate('/app/sentiment')}
         />
       </div>

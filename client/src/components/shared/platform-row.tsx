@@ -160,9 +160,9 @@ interface TableHeaderProps {
  *   <TableHeader
  *     gridCols="grid-cols-[1fr_auto_80px]"
  *     columns={[
- *       { label: 'SOURCE' },
- *       { label: 'CITATIONS', align: 'right' },
- *       { label: 'SENTIMENT', align: 'right' },
+ *       { label: 'Source' },
+ *       { label: 'Citations', align: 'right' },
+ *       { label: 'Sentiment', align: 'right' },
  *     ]}
  *   />
  */
@@ -177,7 +177,7 @@ export function TableHeader({ columns, gridCols, className }: TableHeaderProps) 
                 <span
                     key={col.label}
                     className={cn(
-                        'text-figma-2xs font-medium text-figma-secondary uppercase',
+                        'text-figma-2xs font-medium text-figma-secondary',
                         col.align === 'right' && 'text-right',
                         col.className,
                     )}

@@ -151,12 +151,12 @@ const PageHeader = React.forwardRef<HTMLDivElement, PageHeaderProps>(
 
         {/* Bottom row: Title + Actions */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
+          <div className="space-y-2">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
               {title}
             </h1>
             {description && (
-              <p className="text-sm text-muted-foreground">{description}</p>
+              <p className="text-figma-sm text-figma-secondary">{description}</p>
             )}
           </div>
 

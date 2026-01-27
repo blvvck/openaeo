@@ -116,17 +116,17 @@ export function HeadToHeadCard({
             <div className="space-y-0">
               {/* Header */}
               <div className="grid grid-cols-[1fr_80px_80px_80px] gap-3 pb-2 border-b border-figma-border-light">
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase">
-                  METRIC
+                <span className="text-figma-2xs font-medium text-figma-secondary">
+                  Metric
                 </span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
-                  YOU
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">
+                  You
                 </span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
-                  THEM
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">
+                  Them
                 </span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">
-                  DIFF
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">
+                  Diff
                 </span>
               </div>
 

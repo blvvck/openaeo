@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useLocation, useSearch } from 'wouter';
-import { Users, Plus, Loader2 } from 'lucide-react';
+import { Users, Plus, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DEMO_CONFIG } from '@/config/app';
+import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
 
 // UI Components
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,7 +22,7 @@ import {
   CardDivider,
   InsightBox,
 } from '@/components/shared';
-import { ErrorState } from '@/components/shared/empty-state';
+import { CardEmptyState, ErrorState } from '@/components/shared/empty-state';
 import {
   TimeRangeSelector,
   useTimeRange,
@@ -67,16 +67,18 @@ import type { TimeRangePreset, CompetitorDetail } from '@shared/types';
 
 interface OverviewTabProps {
   range: TimeRange;
-  onRangeChange: (range: TimeRange) => void;
+  onOpenDateFilter: () => void;
+  initialCompetitorId: string | null;
+  mockEmptyPeriod: boolean;
   isAddModalOpen: boolean;
   onOpenAddModal: () => void;
   onCloseAddModal: () => void;
 }
 
-function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onCloseAddModal }: OverviewTabProps) {
+function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPeriod, isAddModalOpen, onOpenAddModal, onCloseAddModal }: OverviewTabProps) {
+  const organizationName = useActiveWorkspaceName();
   const timeRangePreset = range.preset as TimeRangePreset;
   const { toast } = useToast();
-
   // Selected competitor for head-to-head
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
 
@@ -86,6 +88,7 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
   // Competitor detail modal state
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [detailCompetitor, setDetailCompetitor] = useState<CompetitorDetail | null>(null);
+  const [handledInitialCompetitorId, setHandledInitialCompetitorId] = useState<string | null>(null);
   const handleOpenDetailModal = (competitor: CompetitorDetail) => {
     setDetailCompetitor(competitor);
     setIsDetailModalOpen(true);
@@ -133,6 +136,16 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
     isLoading: trendsLoading,
   } = useCompetitorTrends(timeRangePreset);
 
+  useEffect(() => {
+    if (!initialCompetitorId || !competitorsData || handledInitialCompetitorId === initialCompetitorId) return;
+    const competitor = competitorsData.competitors.find(({ id }) => String(id) === initialCompetitorId);
+    if (competitor) {
+      setDetailCompetitor(competitor);
+      setIsDetailModalOpen(true);
+    }
+    setHandledInitialCompetitorId(initialCompetitorId);
+  }, [competitorsData, handledInitialCompetitorId, initialCompetitorId]);
+
   // Event handlers
   const handleRetry = () => {
     refetchCompetitors();
@@ -169,6 +182,9 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
 
   // Check if we have real tracked data (prompts + responses)
   const hasTrackedData = metricsData?.meta?.hasTrackedData ?? false;
+  const noResultsForRange = mockEmptyPeriod || Boolean(
+    trendsData?.hasHistoricalData && !trendsData.hasDataInRange
+  );
 
   // Error state
   if (competitorsError && !isLoading) {
@@ -208,7 +224,7 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
       ) : (<>
 
       {/* Info banner for empty state */}
-      {!hasTrackedData && (
+      {!hasTrackedData && !noResultsForRange && (
         <div className="bg-figma-blue-light border border-figma-blue/20 rounded-lg px-4 py-3 mb-8">
           <p className="text-figma-sm text-figma-primary">
             <span className="font-medium">No ranking data yet.</span>{' '}
@@ -218,31 +234,31 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
       )}
 
       {/* Row 1: Competitive Intelligence Cards (horizontal scroll for 5 cards) */}
-      <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hover mb-8 -mr-6 pr-6">
+      <div className="flex gap-6 overflow-x-auto pb-2 scrollbar-hover mb-8 -mr-6 pr-6 2xl:mr-0 2xl:grid 2xl:grid-cols-5 2xl:overflow-visible 2xl:pb-0 2xl:pr-0">
         {!hasTrackedData ? (
           <>
-            <div className="w-[260px] flex-shrink-0"><YourRankCard data={null} brandName={DEMO_CONFIG.brandName} /></div>
-            <div className="w-[260px] flex-shrink-0"><ShareOfAnswerCard data={null} brandName={DEMO_CONFIG.brandName} /></div>
-            <div className="w-[260px] flex-shrink-0"><HighIntentCard data={null} /></div>
-            <div className="w-[260px] flex-shrink-0"><CitationRateCompetitorCard data={null} /></div>
-            <div className="w-[260px] flex-shrink-0"><CompetitivePressureCard data={null} /></div>
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0"><YourRankCard data={null} brandName={organizationName} noPeriodData={noResultsForRange} /></div>
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0"><ShareOfAnswerCard data={null} brandName={organizationName} noPeriodData={noResultsForRange} /></div>
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0"><HighIntentCard data={null} noPeriodData={noResultsForRange} /></div>
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0"><CitationRateCompetitorCard data={null} noPeriodData={noResultsForRange} /></div>
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0"><CompetitivePressureCard data={null} noPeriodData={noResultsForRange} /></div>
           </>
         ) : (
           <>
-            <div className="w-[260px] flex-shrink-0">
-              <YourRankCard data={metricsData?.yourRank || null} brandName={DEMO_CONFIG.brandName} />
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0">
+              <YourRankCard data={metricsData?.yourRank || null} brandName={organizationName} noPeriodData={noResultsForRange} />
             </div>
-            <div className="w-[260px] flex-shrink-0">
-              <ShareOfAnswerCard data={metricsData?.shareOfAnswer || null} brandName={DEMO_CONFIG.brandName} />
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0">
+              <ShareOfAnswerCard data={metricsData?.shareOfAnswer || null} brandName={organizationName} noPeriodData={noResultsForRange} />
             </div>
-            <div className="w-[260px] flex-shrink-0">
-              <HighIntentCard data={metricsData?.highIntent || null} />
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0">
+              <HighIntentCard data={metricsData?.highIntent || null} noPeriodData={noResultsForRange} />
             </div>
-            <div className="w-[260px] flex-shrink-0">
-              <CitationRateCompetitorCard data={metricsData?.citationRate || null} />
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0">
+              <CitationRateCompetitorCard data={metricsData?.citationRate || null} noPeriodData={noResultsForRange} />
             </div>
-            <div className="w-[260px] flex-shrink-0">
-              <CompetitivePressureCard data={metricsData?.competitivePressure || null} />
+            <div className="w-[260px] flex-shrink-0 2xl:w-auto 2xl:min-w-0">
+              <CompetitivePressureCard data={metricsData?.competitivePressure || null} noPeriodData={noResultsForRange} />
             </div>
           </>
         )}
@@ -256,20 +272,43 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
           actionLabel="+ Add competitor"
           onAction={onOpenAddModal}
           hideActionIcon
+          contentClassName="pt-0"
         >
-          {!hasTrackedData ? (
+          {noResultsForRange ? (
+            <>
+              <div className="grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 px-5 py-3 border-b border-figma-border-light">
+                <span className="text-figma-2xs font-medium text-figma-secondary">Rank</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary">Brand</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Share of answers</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">High-intent</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary pl-3">Top prompt</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary">Platforms</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Score</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Trend</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Δ</span>
+                <span></span>
+              </div>
+              <CardEmptyState
+                icon={Search}
+                title="No rankings for this period"
+                description="Change the date range to view results from another period."
+                action={{ label: 'Adjust date filter', onClick: onOpenDateFilter }}
+                className="min-h-[280px]"
+              />
+            </>
+          ) : !hasTrackedData ? (
             <>
               {/* Table Header — matches CompetitorLeaderboardExtended */}
-              <div className="grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 px-5 py-3 border-b border-figma-border-light bg-figma-hover rounded-t-lg">
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase">Rank</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase">Brand</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Share of Answers</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">High-Intent</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase pl-3">Top Prompt</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase">Platforms</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Score</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Trend</span>
-                <span className="text-figma-2xs font-medium text-figma-secondary uppercase text-right">Δ</span>
+              <div className="grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 px-5 py-3 border-b border-figma-border-light">
+                <span className="text-figma-2xs font-medium text-figma-secondary">Rank</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary">Brand</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Share of answers</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">High-intent</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary pl-3">Top prompt</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary">Platforms</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Score</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Trend</span>
+                <span className="text-figma-2xs font-medium text-figma-secondary text-right">Δ</span>
                 <span></span>
               </div>
               <div className="divide-y divide-figma-border-light">
@@ -278,7 +317,7 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
                   <span className="text-figma-sm font-medium text-figma-secondary">—</span>
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-5 h-5 rounded-full bg-figma-hover shrink-0" />
-                    <span className="text-figma-sm font-semibold text-figma-blue truncate">{DEMO_CONFIG.brandName}</span>
+                    <span className="text-figma-sm font-semibold text-figma-blue truncate">{organizationName}</span>
                     <span className="text-[9px] leading-none font-medium text-figma-blue bg-white rounded px-1.5 py-1 shrink-0">You</span>
                   </div>
                   <span className="text-figma-sm text-figma-muted text-right">—</span>
@@ -346,15 +385,17 @@ function OverviewTab({ range, onRangeChange, isAddModalOpen, onOpenAddModal, onC
       {/* Row 3: Trends Chart */}
       <div className="mb-8">
         <ContentCard
-          title={`${DEMO_CONFIG.brandName} vs competitors`}
+          title={`${organizationName} vs competitors`}
           subtitle="Who's gaining ground over time"
           headerRight={<TrendMetricTabs value={trendMetric} onChange={setTrendMetric} />}
         >
           <CompetitorTrendsChart
               data={trendsData ?? { points: [], competitors: [] }}
               metric={trendMetric}
-              brandName={trendsData?.competitors?.find(c => c.isYou)?.name || DEMO_CONFIG.brandName}
-              isEmpty={!hasTrackedData || trendsLoading || !trendsData?.points?.length || (trendsData?.competitors?.length ?? 0) <= 1}
+              brandName={trendsData?.competitors?.find(c => c.isYou)?.name || organizationName}
+              isEmpty={trendsLoading || !trendsData?.hasHistoricalData}
+              noDataForRange={!trendsLoading && noResultsForRange}
+              onAdjustDateRange={onOpenDateFilter}
               timeRange={timeRangePreset}
             />
         </ContentCard>
@@ -387,6 +428,8 @@ export function CompetitorsPage() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { range, setRange } = useTimeRange('30d');
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const mockEmptyPeriod = import.meta.env.DEV && new URLSearchParams(search).get('mock') === 'empty-range';
 
   // Get initial tab and brand from URL
   const urlParams = new URLSearchParams(search);
@@ -451,7 +494,12 @@ export function CompetitorsPage() {
                 <Plus className="w-4 h-4" />
                 Add competitor
               </Button>
-              <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+              <TimeRangeSelector
+                value={range}
+                onChange={handleTimeRangeChange}
+                open={dateFilterOpen}
+                onOpenChange={setDateFilterOpen}
+              />
             </div>
           ) : undefined
         }
@@ -481,7 +529,9 @@ export function CompetitorsPage() {
         <TabsContent value="overview">
           <OverviewTab
             range={range}
-            onRangeChange={handleTimeRangeChange}
+            onOpenDateFilter={() => setDateFilterOpen(true)}
+            initialCompetitorId={urlParams.get('competitorId')}
+            mockEmptyPeriod={mockEmptyPeriod}
             isAddModalOpen={isAddModalOpen}
             onOpenAddModal={handleOpenAddModal}
             onCloseAddModal={handleCloseAddModal}

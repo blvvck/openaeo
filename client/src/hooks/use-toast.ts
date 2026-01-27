@@ -9,10 +9,16 @@ export type ToastOptions = {
 
 export type ToastRecord = ToastOptions & { id: string };
 
+type ToastTimer = {
+  timeout?: ReturnType<typeof setTimeout>;
+  remaining: number;
+  startedAt: number;
+};
+
 const maxVisibleToasts = 3;
 const visibleToasts: ToastRecord[] = [];
 const listeners = new Set<(toasts: ToastRecord[]) => void>();
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+const timers = new Map<string, ToastTimer>();
 let nextId = 0;
 
 function publish(): void {
@@ -22,13 +28,30 @@ function publish(): void {
 
 function dismiss(id: string): void {
   const timer = timers.get(id);
-  if (timer) clearTimeout(timer);
+  if (timer?.timeout !== undefined) clearTimeout(timer.timeout);
   timers.delete(id);
   const index = visibleToasts.findIndex((item) => item.id === id);
   if (index >= 0) {
     visibleToasts.splice(index, 1);
     publish();
   }
+}
+
+export function pauseToast(id: string): void {
+  const timer = timers.get(id);
+  if (!timer || timer.timeout === undefined) return;
+
+  clearTimeout(timer.timeout);
+  timer.timeout = undefined;
+  timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.startedAt));
+}
+
+export function resumeToast(id: string): void {
+  const timer = timers.get(id);
+  if (!timer || timer.timeout !== undefined) return;
+
+  timer.startedAt = Date.now();
+  timer.timeout = setTimeout(() => dismiss(id), timer.remaining);
 }
 
 export function toast(options: ToastOptions): { id: string; dismiss: () => void } {
@@ -38,12 +61,14 @@ export function toast(options: ToastOptions): { id: string; dismiss: () => void 
     const removed = visibleToasts.pop();
     if (removed) {
       const timer = timers.get(removed.id);
-      if (timer) clearTimeout(timer);
+      if (timer?.timeout !== undefined) clearTimeout(timer.timeout);
       timers.delete(removed.id);
     }
   }
   publish();
-  timers.set(id, setTimeout(() => dismiss(id), 6_000));
+  const timer: ToastTimer = { remaining: 6_000, startedAt: Date.now() };
+  timer.timeout = setTimeout(() => dismiss(id), timer.remaining);
+  timers.set(id, timer);
   return { id, dismiss: () => dismiss(id) };
 }
 
