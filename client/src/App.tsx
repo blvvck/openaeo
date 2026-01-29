@@ -6,6 +6,7 @@ import { WorkspaceSetup } from "@/components/onboarding/workspace-setup";
 import { AppLoadingScreen } from "@/components/shared/app-loading";
 import { CompetitorRangeMock } from "@/pages/competitor-range-mock";
 import { APP_CONFIG, DEMO_CONFIG } from "@/config/app";
+import { isDemoPreview } from "@/lib/demo-preview";
 import { getActiveWorkspaceId, setActiveWorkspace, workspaceQueryClient, type WorkspaceListResponse } from "./lib/workspace-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -296,10 +297,16 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
   const { user } = useUser();
+  const demoPreview = isDemoPreview();
   const { data: workspaceData, isPending: workspacesPending, error: workspaceError } = useQuery<WorkspaceListResponse>({
     queryKey: ["/api/workspaces"],
-    enabled: isLoaded && Boolean(isSignedIn),
+    enabled: !demoPreview && isLoaded && Boolean(isSignedIn),
   });
+  const previewWorkspaceData: WorkspaceListResponse = {
+    workspaces: [{ id: "demo-workspace", name: DEMO_CONFIG.workspaceName, slug: "demo", role: "owner", onboarding_completed_at: new Date().toISOString() }],
+    currentWorkspaceId: "demo-workspace",
+  };
+  const activeWorkspaceData = demoPreview ? previewWorkspaceData : workspaceData;
 
   const handleLogout = async () => {
     localStorage.removeItem('onboarding_completed_steps');
@@ -307,22 +314,22 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     await signOut({ redirectUrl: "/" });
   };
 
-  if (!isLoaded || (isSignedIn && workspacesPending)) return <AppLoadingScreen />;
-  if (!isSignedIn) return <RedirectToSignIn />;
-  if (!workspaceData || workspaceError) {
+  if (!isLoaded || (!demoPreview && isSignedIn && workspacesPending)) return <AppLoadingScreen />;
+  if (!demoPreview && !isSignedIn) return <RedirectToSignIn />;
+  if (!activeWorkspaceData || (!demoPreview && workspaceError)) {
     return <div className="p-6 text-sm text-destructive">Unable to load your workspaces. Refresh to try again.</div>;
   }
 
-  const activeWorkspace = workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
-    ?? workspaceData.workspaces.find(({ id }) => id === workspaceData.currentWorkspaceId)
-    ?? workspaceData.workspaces[0];
+  const activeWorkspace = activeWorkspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
+    ?? activeWorkspaceData.workspaces.find(({ id }) => id === activeWorkspaceData.currentWorkspaceId)
+    ?? activeWorkspaceData.workspaces[0];
 
   if (activeWorkspace && !activeWorkspace.onboarding_completed_at) {
     return <Redirect to="/onboarding" />;
   }
 
   const handleSwitchWorkspace = (workspaceId: string) => {
-    if (!workspaceData.workspaces.some(({ id }) => id === workspaceId)) return;
+    if (!activeWorkspaceData.workspaces.some(({ id }) => id === workspaceId)) return;
     setActiveWorkspace(workspaceId);
     window.location.reload();
   };
@@ -333,8 +340,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarNav>
           {/* Unified header: app logo + brand switcher in ONE element */}
           <UnifiedSidebarHeader
-            workspaces={workspaceData.workspaces}
-            currentWorkspaceId={workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())?.id ?? workspaceData.currentWorkspaceId}
+            workspaces={activeWorkspaceData.workspaces}
+            currentWorkspaceId={activeWorkspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())?.id ?? activeWorkspaceData.currentWorkspaceId}
             onSwitchWorkspace={handleSwitchWorkspace}
           />
 

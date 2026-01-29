@@ -11,6 +11,33 @@ OpenAEO is open-source software for tracking how brands appear in AI-generated a
 - Competitor monitoring, site diagnostics, and AI crawler visit reporting
 - Clerk sign-in with per-workspace data isolation
 
+## Screenshots
+
+The development server includes a read-only preview with local sample data. Start the app with `npm run dev`, then add `?mock=demo` to any supported page URL:
+
+- Dashboard: `http://localhost:3000/app/dashboard?mock=demo`
+- Competitors: `http://localhost:3000/app/competitors?mock=demo`
+- Bot traffic: `http://localhost:3000/app/bot-traffic?mock=demo`
+- Citations: `http://localhost:3000/app/citations?mock=demo`
+
+The preview is enabled only in development and does not write to your workspace.
+
+### Dashboard
+
+![OpenAEO dashboard](docs/screenshots/dashboard.png)
+
+### Competitors
+
+![OpenAEO competitors](docs/screenshots/competitors.png)
+
+### Bot traffic
+
+![OpenAEO bot traffic](docs/screenshots/bot-traffic.png)
+
+### Citations
+
+![OpenAEO citations](docs/screenshots/citations.png)
+
 ## Stack
 
 - React, TypeScript, and Vite for the web client

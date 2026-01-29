@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { formatCompact, formatRankBadge } from '@/lib/formatters';
 import { DEMO_CONFIG, APP_CONFIG } from '@/config/app';
+import { getDemoAlerts, getDemoDashboard, getDemoInsights, isDemoPreview } from '@/lib/demo-preview';
 
 // UI Components
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -92,6 +93,7 @@ function useDashboardData(range: TimeRange) {
   return useQuery<DashboardResponse>({
     queryKey: ['dashboard', range.preset, range.from.toISOString(), range.to.toISOString()],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoDashboard();
       const params = new URLSearchParams({ timeRange: range.preset });
       if (range.preset === 'custom') {
         params.set('startDate', range.from.toISOString());
@@ -114,6 +116,7 @@ function useRecentAlerts() {
   return useQuery<RecentAlertsResponse>({
     queryKey: ['alerts', 'recent'],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoAlerts();
       const res = await fetch('/api/alerts/recent?limit=5');
       if (!res.ok) {
         throw new Error('Failed to load alerts');
@@ -129,6 +132,7 @@ function useTopInsights() {
   return useQuery<TopInsightsResponse>({
     queryKey: ['insights', 'top'],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoInsights();
       const res = await fetch('/api/insights/top?limit=3');
       if (!res.ok) {
         throw new Error('Failed to load insights');

@@ -12,6 +12,7 @@
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { workspaceFetch } from '@/lib/workspace-query';
+import { isDemoPreview } from '@/lib/demo-preview';
 import type {
   CitationsOverviewResponse,
   CitationsListResponse,
@@ -198,17 +199,6 @@ function generateMockCitations(params: {
     );
   }
 
-  // Generate more citations if needed for pagination
-  while (filtered.length < params.limit + params.offset + 10) {
-    const base = SAMPLE_CITATIONS[filtered.length % SAMPLE_CITATIONS.length];
-    filtered.push({
-      ...base,
-      url: `${base.url}-${filtered.length}`,
-      displayUrl: `${base.displayUrl}-${filtered.length}`,
-      count: Math.max(1, base.count - filtered.length),
-    });
-  }
-
   const citations = filtered.slice(params.offset, params.offset + params.limit).map((c, i) => ({
     ...c,
     id: `citation-${params.offset + i}`,
@@ -270,6 +260,7 @@ export function useCitationsOverview(timeRange: TimeRangePreset) {
   return useQuery<CitationsOverviewResponse>({
     queryKey: ['citations', 'overview', timeRange],
     queryFn: async () => {
+      if (isDemoPreview()) return generateMockOverview();
       const res = await workspaceFetch(`/api/citations/overview?timeRange=${timeRange}`);
       if (!res.ok) throw new Error('Failed to load citations overview');
       return res.json();
@@ -307,6 +298,9 @@ export function useCitations(params: {
       if (sortBy) params.set('sortBy', sortBy);
       if (sortDir) params.set('sortDir', sortDir);
 
+      if (isDemoPreview()) {
+        return generateMockCitations({ type, platform, sentiment, search, limit, offset });
+      }
       const res = await workspaceFetch(`/api/citations?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load citations');
       return res.json();
@@ -326,6 +320,7 @@ export function useCitationDetail(citationId: string | null) {
     queryFn: async () => {
       if (!citationId) throw new Error('No citation selected');
 
+      if (isDemoPreview()) return generateMockCitationDetail(citationId);
       const res = await workspaceFetch(`/api/citations/${encodeURIComponent(citationId)}`);
       if (!res.ok) throw new Error('Failed to load citation detail');
       return res.json();

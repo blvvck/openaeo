@@ -84,11 +84,9 @@ function generateChartData(bots: BotStats[], timeRange: TimeRange): ChartDataPoi
       date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     };
 
-    // Add each bot's visits with some random variation
-    bots.forEach(bot => {
+    bots.forEach((bot, botIndex) => {
       const avg = dailyAverages[bot.botType];
-      // Add 20% random variation
-      const variation = Math.random() * 0.4 - 0.2;
+      const variation = (((i + 1) * (botIndex + 3)) % 9 - 4) / 20;
       const value = Math.max(0, Math.round(avg * (1 + variation)));
       point[bot.botType] = value;
     });
@@ -116,7 +114,7 @@ function CustomTooltip({
   const total = payload.reduce((sum, entry) => sum + entry.value, 0);
 
   return (
-    <div className="bg-figma-card border border-figma-border rounded-lg px-3 py-2 shadow-lg">
+    <div className="bg-figma-card border border-figma-border rounded-xl px-3 py-2 shadow-lg">
       <p className="text-figma-xs font-medium text-figma-primary mb-2">{label}</p>
       <div className="space-y-1">
         {payload.map((entry) => (
@@ -233,7 +231,7 @@ export function BotTrafficChart({
               <Tooltip
                 content={({ active }) =>
                   active ? (
-                    <div className="bg-figma-card border border-figma-border rounded-lg px-3 py-2 shadow-lg">
+                    <div className="bg-figma-card border border-figma-border rounded-xl px-3 py-2 shadow-lg">
                       <p className="text-figma-xs text-figma-muted">No data yet</p>
                     </div>
                   ) : null

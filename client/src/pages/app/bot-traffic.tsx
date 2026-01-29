@@ -93,6 +93,7 @@ import { BotTrafficChart } from '@/components/bots/bot-traffic-chart';
 
 // Platform Icon & Bot Constants
 import { PlatformIcon, getPlatformInfo, getPlatformColor, AI_BOTS, SEARCH_BOTS, SOCIAL_BOTS } from '@/components/ui/platform-icon';
+import { isDemoPreview } from '@/lib/demo-preview';
 
 // Types
 import type { TimeRangePreset } from '@shared/types';
@@ -227,6 +228,7 @@ function useBotStats(range: TimeRange) {
   return useQuery<BotStatsResponse>({
     queryKey: ['bot-traffic', 'stats', from.toISOString(), to.toISOString()],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoBotStats(range);
       const params = new URLSearchParams({
         from: from.toISOString(),
         to: to.toISOString(),
@@ -250,6 +252,7 @@ function useAIBotStats(range: TimeRange) {
   return useQuery<AIBotStats>({
     queryKey: ['bot-traffic', 'ai-bots', from.toISOString(), to.toISOString()],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoAIStats();
       const params = new URLSearchParams({
         from: from.toISOString(),
         to: to.toISOString(),
@@ -273,6 +276,7 @@ function useRecentBotVisits(range: TimeRange, limit: number = 10, botType?: stri
   return useQuery<RecentVisitsResponse>({
     queryKey: ['bot-traffic', 'recent', from.toISOString(), to.toISOString(), limit, botType],
     queryFn: async () => {
+      if (isDemoPreview()) return getDemoRecentVisits(limit, botType);
       const params = new URLSearchParams({
         limit: String(limit),
         from: from.toISOString(),
@@ -373,19 +377,41 @@ const SEEDED_TOP_PAGES: TopCrawledPage[] = [
 ];
 
 const SEEDED_RECENT_VISITS: BotVisit[] = [
-  { id: 1, botType: 'GPTBot', userAgent: 'GPTBot/1.0', url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 2 * 60000).toISOString(), statusCode: 200, responseTimeMs: 142, contentType: 'text/html', contentLengthBytes: 45231 },
-  { id: 2, botType: 'ClaudeBot', userAgent: 'ClaudeBot/1.0', url: '/docs/getting-started', visitedAt: new Date(Date.now() - 5 * 60000).toISOString(), statusCode: 200, responseTimeMs: 89, contentType: 'text/html', contentLengthBytes: 32156 },
-  { id: 3, botType: 'Googlebot', userAgent: 'Googlebot/2.1', url: '/pricing', visitedAt: new Date(Date.now() - 12 * 60000).toISOString(), statusCode: 200, responseTimeMs: 67, contentType: 'text/html', contentLengthBytes: 28943 },
-  { id: 4, botType: 'PerplexityBot', userAgent: 'PerplexityBot/1.0', url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 15 * 60000).toISOString(), statusCode: 200, responseTimeMs: 156, contentType: 'text/html', contentLengthBytes: 52847 },
-  { id: 5, botType: 'GPTBot', userAgent: 'GPTBot/1.0', url: '/features', visitedAt: new Date(Date.now() - 23 * 60000).toISOString(), statusCode: 200, responseTimeMs: 78, contentType: 'text/html', contentLengthBytes: 31256 },
-  { id: 6, botType: 'ClaudeBot', userAgent: 'ClaudeBot/1.0', url: '/blog/case-study', visitedAt: new Date(Date.now() - 35 * 60000).toISOString(), statusCode: 200, responseTimeMs: 134, contentType: 'text/html', contentLengthBytes: 48923 },
-  { id: 7, botType: 'Google-Extended', userAgent: 'Google-Extended', url: '/docs/api', visitedAt: new Date(Date.now() - 42 * 60000).toISOString(), statusCode: 200, responseTimeMs: 112, contentType: 'text/html', contentLengthBytes: 67432 },
-  { id: 8, botType: 'GPTBot', userAgent: 'GPTBot/1.0', url: '/about', visitedAt: new Date(Date.now() - 58 * 60000).toISOString(), statusCode: 200, responseTimeMs: 45, contentType: 'text/html', contentLengthBytes: 18234 },
-  { id: 9, botType: 'PerplexityBot', userAgent: 'PerplexityBot/1.0', url: '/pricing', visitedAt: new Date(Date.now() - 65 * 60000).toISOString(), statusCode: 304, responseTimeMs: 23, contentType: null, contentLengthBytes: 0 },
-  { id: 10, botType: 'Bingbot', userAgent: 'bingbot/2.0', url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 78 * 60000).toISOString(), statusCode: 200, responseTimeMs: 167, contentType: 'text/html', contentLengthBytes: 45231 },
-  { id: 11, botType: 'Twitterbot', userAgent: 'Twitterbot/1.0', url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 85 * 60000).toISOString(), statusCode: 200, responseTimeMs: 98, contentType: 'text/html', contentLengthBytes: 52847 },
-  { id: 12, botType: 'facebookexternalhit', userAgent: 'facebookexternalhit/1.1', url: '/features', visitedAt: new Date(Date.now() - 92 * 60000).toISOString(), statusCode: 200, responseTimeMs: 76, contentType: 'text/html', contentLengthBytes: 31256 },
+  { id: 1, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 2 * 60000).toISOString(), statusCode: 200, responseTimeMs: 142, contentType: 'text/html', contentLengthBytes: 45231 },
+  { id: 2, botType: AI_BOTS[2].id, userAgent: `${AI_BOTS[2].id}/1.0`, url: '/docs/getting-started', visitedAt: new Date(Date.now() - 5 * 60000).toISOString(), statusCode: 200, responseTimeMs: 89, contentType: 'text/html', contentLengthBytes: 32156 },
+  { id: 3, botType: SEARCH_BOTS[0].id, userAgent: `${SEARCH_BOTS[0].id}/2.1`, url: '/pricing', visitedAt: new Date(Date.now() - 12 * 60000).toISOString(), statusCode: 200, responseTimeMs: 67, contentType: 'text/html', contentLengthBytes: 28943 },
+  { id: 4, botType: AI_BOTS[3].id, userAgent: `${AI_BOTS[3].id}/1.0`, url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 15 * 60000).toISOString(), statusCode: 200, responseTimeMs: 156, contentType: 'text/html', contentLengthBytes: 52847 },
+  { id: 5, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/features', visitedAt: new Date(Date.now() - 23 * 60000).toISOString(), statusCode: 200, responseTimeMs: 78, contentType: 'text/html', contentLengthBytes: 31256 },
+  { id: 6, botType: AI_BOTS[2].id, userAgent: `${AI_BOTS[2].id}/1.0`, url: '/blog/case-study', visitedAt: new Date(Date.now() - 35 * 60000).toISOString(), statusCode: 200, responseTimeMs: 134, contentType: 'text/html', contentLengthBytes: 48923 },
+  { id: 7, botType: AI_BOTS[4].id, userAgent: AI_BOTS[4].id, url: '/docs/api', visitedAt: new Date(Date.now() - 42 * 60000).toISOString(), statusCode: 200, responseTimeMs: 112, contentType: 'text/html', contentLengthBytes: 67432 },
+  { id: 8, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/about', visitedAt: new Date(Date.now() - 58 * 60000).toISOString(), statusCode: 200, responseTimeMs: 45, contentType: 'text/html', contentLengthBytes: 18234 },
+  { id: 9, botType: AI_BOTS[3].id, userAgent: `${AI_BOTS[3].id}/1.0`, url: '/pricing', visitedAt: new Date(Date.now() - 65 * 60000).toISOString(), statusCode: 304, responseTimeMs: 23, contentType: null, contentLengthBytes: 0 },
+  { id: 10, botType: SEARCH_BOTS[1].id, userAgent: `${SEARCH_BOTS[1].id}/2.0`, url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 78 * 60000).toISOString(), statusCode: 200, responseTimeMs: 167, contentType: 'text/html', contentLengthBytes: 45231 },
+  { id: 11, botType: SOCIAL_BOTS[0].id, userAgent: `${SOCIAL_BOTS[0].id}/1.0`, url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 85 * 60000).toISOString(), statusCode: 200, responseTimeMs: 98, contentType: 'text/html', contentLengthBytes: 52847 },
+  { id: 12, botType: SOCIAL_BOTS[1].id, userAgent: `${SOCIAL_BOTS[1].id}/1.1`, url: '/features', visitedAt: new Date(Date.now() - 92 * 60000).toISOString(), statusCode: 200, responseTimeMs: 76, contentType: 'text/html', contentLengthBytes: 31256 },
 ];
+
+function getDemoBotStats(range: TimeRange): BotStatsResponse {
+  const bots = [
+    ...AI_BOTS.map(bot => ({ botType: bot.id, category: 'ai', visitCount: DEMO_AI_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_AI_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
+    ...SEARCH_BOTS.map(bot => ({ botType: bot.id, category: 'search', visitCount: DEMO_SEARCH_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_SEARCH_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
+    ...SOCIAL_BOTS.map(bot => ({ botType: bot.id, category: 'social', visitCount: DEMO_SOCIAL_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_SOCIAL_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
+  ];
+  const aiVisits = bots.filter(bot => bot.category === 'ai').reduce((total, bot) => total + bot.visitCount, 0);
+  const searchVisits = bots.filter(bot => bot.category === 'search').reduce((total, bot) => total + bot.visitCount, 0);
+  const socialVisits = bots.filter(bot => bot.category === 'social').reduce((total, bot) => total + bot.visitCount, 0);
+  return { totalVisits: aiVisits + searchVisits + socialVisits, aiVisits, searchVisits, socialVisits, otherVisits: 0, byBot: bots, period: { from: range.from.toISOString(), to: range.to.toISOString(), hasHistoricalData: false, hasDataInRange: true }, isDemo: true, cdnConfigured: false };
+}
+
+function getDemoAIStats(): AIBotStats {
+  const aiBots = AI_BOTS.map(bot => ({ botType: bot.id, category: 'ai', visitCount: DEMO_AI_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_AI_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() }));
+  return { aiBots, totalAIVisits: aiBots.reduce((total, bot) => total + bot.visitCount, 0), isDemo: true };
+}
+
+function getDemoRecentVisits(limit: number, botType?: string): RecentVisitsResponse {
+  const visits = SEEDED_RECENT_VISITS.filter(visit => !botType || botType === 'all' || visit.botType === botType).slice(0, limit);
+  return { visits, count: visits.length, isDemo: true };
+}
 
 // ============================================================================
 // Site Health Types (from shared)
@@ -452,8 +478,8 @@ const MOCK_SITE_HEALTH_AUDIT: SiteHealthAudit = {
 // ============================================================================
 
 function useSiteHealth() {
-  const isMockPreview = import.meta.env.DEV
-    && new URLSearchParams(window.location.search).get('mockSiteHealth') === '1';
+  const isMockPreview = isDemoPreview() || (import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('mockSiteHealth') === '1');
   const [audit, setAudit] = useState<SiteHealthAudit | null>(
     isMockPreview ? MOCK_SITE_HEALTH_AUDIT : null
   );
@@ -950,6 +976,7 @@ export function BotTrafficPage() {
   // Get initial tab from URL
   const urlParams = new URLSearchParams(search);
   const mockEmptyPeriod = import.meta.env.DEV && urlParams.get('mock') === 'empty-period';
+  const mockDemoPreview = isDemoPreview();
   const tabParam = urlParams.get('tab');
   const initialTab = tabParam === 'by-type' ? 'by-type' : tabParam === 'site-health' ? 'site-health' : 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -999,7 +1026,9 @@ export function BotTrafficPage() {
 
   // Raw recent visits - only show seeded demo data if range includes today
   const hasRealData = recentData?.visits?.length && recentData.visits.length > 0;
-  const rawRecentVisits = hasRealData
+  const rawRecentVisits = mockDemoPreview && !mockEmptyPeriod
+    ? SEEDED_RECENT_VISITS
+    : hasRealData
     ? recentData.visits
     : (rangeIncludesToday ? SEEDED_RECENT_VISITS : []);
 
@@ -1157,8 +1186,8 @@ export function BotTrafficPage() {
   const noResultsForRange = mockEmptyPeriod || Boolean(
     statsData?.period?.hasHistoricalData && !statsData.period.hasDataInRange
   );
-  const isDemo = !mockEmptyPeriod && (statsData?.cdnConfigured === true ? false : !statsData?.period?.hasHistoricalData);
-  const showDemoData = !mockEmptyPeriod && isDemo && rangeIncludesToday;
+  const isDemo = !mockEmptyPeriod && (mockDemoPreview || (statsData?.cdnConfigured !== true && !statsData?.period?.hasHistoricalData));
+  const showDemoData = !mockEmptyPeriod && (mockDemoPreview || (isDemo && rangeIncludesToday));
   const allBots = statsData?.byBot || [];
 
   // Always show all supported bots from constants - merge with real/demo data

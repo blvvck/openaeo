@@ -57,6 +57,7 @@ import {
   useDeleteCompetitor,
 } from '@/hooks/use-competitors';
 import { useToast } from '@/hooks/use-toast';
+import { isDemoPreview } from '@/lib/demo-preview';
 
 // Types
 import type { TimeRangePreset, CompetitorDetail } from '@shared/types';
@@ -269,8 +270,8 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
         <ContentCard
           title="Competitor rankings"
           subtitle="See where you rank in AI responses"
-          actionLabel="+ Add competitor"
-          onAction={onOpenAddModal}
+          actionLabel={isDemoPreview() ? undefined : "+ Add competitor"}
+          onAction={isDemoPreview() ? undefined : onOpenAddModal}
           hideActionIcon
           contentClassName="pt-0"
         >
@@ -331,10 +332,11 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
                 </div>
                 {trackedCompetitors.length > 0 ? (
                   trackedCompetitors.map((comp) => (
-                    <div
+                    <button
+                      type="button"
                       key={comp.id}
                       onClick={() => handleOpenDetailModal(comp)}
-                      className="grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 items-center px-5 py-2.5 cursor-pointer transition-colors hover:bg-figma-hover"
+                      className="w-full text-left grid grid-cols-[2fr_5fr_4fr_4fr_5fr_4fr_3fr_3fr_2fr_1fr] gap-2 items-center px-5 py-2.5 cursor-pointer transition-colors hover:bg-figma-hover"
                     >
                       <span className="text-figma-sm text-figma-muted">—</span>
                       <div className="flex items-center gap-2 min-w-0">
@@ -349,7 +351,7 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
                       <span className="text-figma-xs text-figma-muted text-right">—</span>
                       <span className="text-figma-xs text-figma-muted text-right">—</span>
                       <span></span>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   [1, 2, 3].map((i) => (
@@ -376,7 +378,7 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
             <CompetitorLeaderboardExtended
               competitors={competitors}
               onRowClick={(c) => !c.isYou && handleCompetitorSelect(c.id)}
-              onDelete={(c) => handleDeleteCompetitor({ id: c.id, name: c.name })}
+              onDelete={isDemoPreview() ? undefined : (c) => handleDeleteCompetitor({ id: c.id, name: c.name })}
             />
           )}
         </ContentCard>
@@ -485,15 +487,17 @@ export function CompetitorsPage() {
         action={
           !isIntelligence ? (
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenAddModal}
-                className="gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                Add competitor
-              </Button>
+              {!isDemoPreview() && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenAddModal}
+                  className="gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add competitor
+                </Button>
+              )}
               <TimeRangeSelector
                 value={range}
                 onChange={handleTimeRangeChange}
