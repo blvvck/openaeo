@@ -422,7 +422,7 @@ export function DashboardPage() {
               <div>
                 <span className="block text-figma-md font-semibold text-figma-primary leading-tight">Competitor rankings</span>
                 <span className="text-figma-xs font-normal text-figma-secondary mt-0.5 truncate max-w-[220px] block">
-                  {dashboardData!.cardSubtitles?.competitorRankings || 'Your position in the market'}
+                  {dashboardData!.cardSubtitles?.competitorRankings || 'How your brand compares with competitors'}
                 </span>
               </div>
               <button
@@ -449,6 +449,7 @@ export function DashboardPage() {
                 rank: c.rank,
                 id: c.id,
                 name: c.name,
+                domain: c.domain,
                 score: c.score,
                 trend: c.trend,
                 isYou: c.isYou,

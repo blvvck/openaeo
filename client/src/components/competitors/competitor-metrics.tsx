@@ -603,7 +603,7 @@ const TOPIC_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 function TopicBadge({ topic }: { topic: string }) {
-  const colors = TOPIC_COLORS[topic] || { bg: 'bg-gray-50', text: 'text-gray-600' };
+  const colors = TOPIC_COLORS[topic] || { bg: 'bg-figma-hover', text: 'text-figma-secondary' };
   return (
     <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[60px]', colors.bg, colors.text)}>
       {topic}
@@ -706,7 +706,7 @@ export function HighIntentCard({ data, isLoading, noPeriodData = false }: HighIn
                   {query}
                 </span>
                 <div className="w-[70px] flex justify-center">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-400">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-figma-hover text-figma-muted">
                     Topic
                   </span>
                 </div>
@@ -840,11 +840,9 @@ export function CitationRateCompetitorCard({ data, isLoading, noPeriodData = fal
               <div className="flex gap-3">
                 {sourceGroups.map((source) => (
                   <div key={source.label} className="w-[80px] shrink-0 space-y-0.5">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <p key={index} className="text-figma-2xs text-figma-muted truncate">
-                        {source.sites[index] || '—'}
-                      </p>
-                    ))}
+                    {source.sites.length > 0 ? source.sites.slice(0, 4).map((site) => (
+                      <p key={site} className="text-figma-2xs text-figma-muted truncate">{site}</p>
+                    )) : <p className="text-figma-2xs text-figma-muted">No sources</p>}
                   </div>
                 ))}
               </div>

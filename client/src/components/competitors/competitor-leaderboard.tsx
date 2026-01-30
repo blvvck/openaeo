@@ -6,6 +6,7 @@ interface CompetitorRank {
   rank: number;
   id?: string;
   name: string;
+  domain?: string;
   score: number;
   trend: number;
   isYou: boolean;
@@ -84,7 +85,7 @@ export function CompetitorLeaderboard({
             <div className="flex items-center gap-2 min-w-0">
               {isEmpty
                 ? <div className="w-5 h-5 rounded-full shrink-0 bg-figma-hover" />
-                : <CompanyAvatar name={competitor.name} />
+                : <CompanyAvatar name={competitor.name} domain={competitor.domain} />
               }
               <span className={`text-figma-sm truncate ${competitor.isYou ? "font-semibold text-figma-blue" : "font-normal text-figma-primary"}`}>
                 {competitor.name}

@@ -92,6 +92,7 @@ export interface CompetitorRank {
   rank: number;
   id: string;
   name: string;
+  domain?: string;
   score: number;
   trend: number;
   isYou: boolean;           // true for user's brand

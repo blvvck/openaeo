@@ -29,6 +29,7 @@ function ranks() {
     rank: company.rank,
     id: company.id,
     name: company.name,
+    domain: company.domain,
     score: company.score,
     trend: company.trend,
     isYou: company.isYou,
@@ -40,7 +41,7 @@ export function getDemoDashboard(): DashboardResponse {
   return {
     brandName: DEMO_CONFIG.brandName,
     period: { hasHistoricalData: true, hasDataInRange: true },
-    cardSubtitles: { llmMentions: 'Across 5 platforms · Perplexity leads', competitorRankings: 'Leading by 4 points', citationSources: '87 citations from 10 sources', citationFooter: 'G2 leads with 24 citations', sentimentSignal: 'Mostly positive · trending up' },
+    cardSubtitles: { llmMentions: 'Brand mentions across AI platforms', competitorRankings: `How ${DEMO_CONFIG.brandName} compares with competitors`, citationSources: `Sources cited in AI answers about ${DEMO_CONFIG.brandName}`, citationFooter: '', sentimentSignal: `Sentiment in AI responses about ${DEMO_CONFIG.brandName}` },
     visibility: { score: 78, previousScore: 73, trend: 6.8, trendDirection: 'up' },
     metrics: { totalMentions: 208, mentionsTrend: 9.4, avgSentiment: 0.72, sentimentTrend: 4.1, topPlatform: { id: 'perplexity', name: 'Perplexity', icon: 'perplexity' }, activeAlerts: 2 },
     platforms,

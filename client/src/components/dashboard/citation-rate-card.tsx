@@ -100,7 +100,6 @@ export function CitationRateCard({
                                     cy="50%"
                                     innerRadius={22}
                                     outerRadius={36}
-                                    paddingAngle={0}
                                     dataKey="percentage"
                                     stroke="none"
                                 >
@@ -149,11 +148,9 @@ export function CitationRateCard({
                                         </span>
                                     </div>
                                     <div className="space-y-0.5">
-                                        {Array.from({ length: 4 }).map((_, index) => (
-                                            <p key={index} className="text-figma-2xs text-figma-muted truncate">
-                                                {source.sites[index] || '—'}
-                                            </p>
-                                        ))}
+                                        {source.sites.length > 0 ? source.sites.slice(0, 4).map((site) => (
+                                            <p key={site} className="text-figma-2xs text-figma-muted truncate">{site}</p>
+                                        )) : <p className="text-figma-2xs text-figma-muted">No sources</p>}
                                     </div>
                                 </div>
                                 ))}

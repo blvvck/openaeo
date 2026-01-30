@@ -5,6 +5,7 @@ import { Search } from 'lucide-react';
 import { SentimentBadge } from '@/components/shared';
 import { TableHeader } from '@/components/shared';
 import { PlatformIcon } from '@/components/ui/platform-icon';
+import { CompanyAvatar } from '@/components/ui/company-avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CitationSource {
@@ -83,7 +84,7 @@ export function CitationSourcesCard({
                                             )}
                                         >
                                             <div className="flex items-center gap-2.5 min-w-0">
-                                                <div className="w-3.5 h-3.5 rounded-full bg-figma-border-light shrink-0" />
+                                                <CompanyAvatar name={source.domain} domain={source.domain} size="xs" />
                                                 <span className="text-figma-sm font-medium text-figma-primary truncate">
                                                     {source.domain}
                                                 </span>
@@ -107,7 +108,7 @@ export function CitationSourcesCard({
                                     >
                                         <div className="bg-figma-card rounded-xl p-4 min-w-[220px] border border-figma-border shadow-lg">
                                             <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-4 h-4 rounded-full bg-figma-border-light shrink-0" />
+                                                <CompanyAvatar name={source.domain} domain={source.domain} size="sm" />
                                                 <span className="text-figma-base font-semibold text-figma-primary">{source.domain}</span>
                                             </div>
                                             <div className="h-px bg-figma-border-light mb-3" />

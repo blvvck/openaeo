@@ -76,7 +76,7 @@ export function BotVisitsCard({
                                 key={bot.id}
                                 platformId={bot.id}
                                 name={bot.name}
-                                iconSize="sm"
+                                iconSize="xs"
                                 value={`${bot.percentage}%`}
                                 secondaryValue={bot.count}
                             />

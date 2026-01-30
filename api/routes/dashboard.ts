@@ -610,75 +610,13 @@ function categorizeCitationSources(
 /**
  * Build contextual card subtitles
  */
-function buildCardSubtitles(
-  platformScores: PlatformScore[],
-  competitorRanks: CompetitorRank[],
-  citationSources: CategorizedCitationSources,
-  sentimentBreakdown: SentimentBreakdown,
-  topPlatform: { id: string; name: string; icon: string }
-): DashboardResponse['cardSubtitles'] {
-  // LLM mentions
-  const activePlatformCount = platformScores.filter(p => p.mentions > 0).length;
-  const llmMentionsSubtitle =
-    activePlatformCount > 0 ? `Across ${activePlatformCount} platforms · ${topPlatform.name} leads` : "Where you're visible";
-
-  // Competitor rankings
-  let competitorRankingsSubtitle = 'Your position in the market';
-  if (competitorRanks.length > 1) {
-    const brandRankEntry = competitorRanks.find(c => c.isYou);
-    if (brandRankEntry) {
-      if (brandRankEntry.rank === 1) {
-        const runner = competitorRanks.find(c => c.rank === 2);
-        const gap = runner ? Math.round(brandRankEntry.score - runner.score) : 0;
-        competitorRankingsSubtitle = gap > 0 ? `Leading by ${gap} pts` : 'Neck and neck with #2';
-      } else {
-        const leader = competitorRanks[0];
-        const gap = Math.round(leader.score - brandRankEntry.score);
-        competitorRankingsSubtitle = `${gap} pts behind ${leader.name}`;
-      }
-    }
-  }
-
-  // Citation sources - now using categorized data
-  const totalCitationCount = citationSources.owned.count + citationSources.thirdParty.count + citationSources.social.count;
-  const totalSources = citationSources.owned.sites.length + citationSources.thirdParty.sites.length + citationSources.social.sites.length;
-  const citationSourcesSubtitle =
-    totalCitationCount > 0 ? `${totalCitationCount} citations from ${totalSources} sources` : 'What AI cites about you';
-
-  // Citation footer - highlight the dominant category
-  let citationFooterText = '';
-  if (totalCitationCount > 0) {
-    // Find dominant category
-    const categories = [
-      { name: 'owned', ...citationSources.owned },
-      { name: 'third-party', ...citationSources.thirdParty },
-      { name: 'social', ...citationSources.social },
-    ].sort((a, b) => b.count - a.count);
-    const dominant = categories[0];
-    const topSite = dominant.sites[0] || '';
-    citationFooterText = topSite ? `${topSite} · ${dominant.count} citations · ${dominant.percentage}% ${dominant.name}` : '';
-  }
-
-  // Sentiment signal
-  const dominantSentiment =
-    sentimentBreakdown.positive >= sentimentBreakdown.neutral && sentimentBreakdown.positive >= sentimentBreakdown.negative
-      ? 'positive'
-      : sentimentBreakdown.negative >= sentimentBreakdown.positive && sentimentBreakdown.negative >= sentimentBreakdown.neutral
-        ? 'negative'
-        : 'neutral';
-  const sentimentTrendDir =
-    sentimentBreakdown.trend > 1 ? 'trending up' : sentimentBreakdown.trend < -1 ? 'trending down' : 'stable';
-  const sentimentSignalSubtitle =
-    sentimentBreakdown.positive + sentimentBreakdown.neutral + sentimentBreakdown.negative > 0
-      ? `Mostly ${dominantSentiment} · ${sentimentTrendDir}`
-      : 'How AI describes you';
-
+function buildCardSubtitles(brandName: string): DashboardResponse['cardSubtitles'] {
   return {
-    llmMentions: llmMentionsSubtitle,
-    competitorRankings: competitorRankingsSubtitle,
-    citationSources: citationSourcesSubtitle,
-    citationFooter: citationFooterText,
-    sentimentSignal: sentimentSignalSubtitle,
+    llmMentions: 'Brand mentions across AI platforms',
+    competitorRankings: `How ${brandName} compares with competitors`,
+    citationSources: `Sources cited in AI answers about ${brandName}`,
+    citationFooter: '',
+    sentimentSignal: `Sentiment in AI responses about ${brandName}`,
   };
 }
 
@@ -859,6 +797,7 @@ async function computeDashboardData(
       rank: index + 1,
       id: entity.isBrand ? 'your-brand' : entity.name.toLowerCase().replace(/\s+/g, '-'),
       name: entity.name,
+      domain: entity.isBrand ? activeBrandConfig?.domain || undefined : competitors.find(competitor => competitor.name === entity.name)?.domain || undefined,
       score: entity.score,
       trend,
       isYou: entity.isBrand,
@@ -1029,7 +968,7 @@ async function computeDashboardData(
   // =========================================================================
   const [onboarding, cardSubtitles] = await Promise.all([
     getOnboardingSteps(hasResponses),
-    Promise.resolve(buildCardSubtitles(platformScores, competitorRanks, citationSources, sentimentBreakdown, topPlatform)),
+    Promise.resolve(buildCardSubtitles(brandName)),
   ]);
 
   const activeAlerts = alertHistory.filter(a => a.status === 'pending').length;
@@ -1085,11 +1024,11 @@ function createEmptyResponse(onboarding: Awaited<ReturnType<typeof getOnboarding
     brandName: undefined,
     period: { hasHistoricalData, hasDataInRange: false },
     cardSubtitles: {
-      llmMentions: "Where you're visible",
-      competitorRankings: 'Your position in the market',
-      citationSources: 'What AI cites about you',
+      llmMentions: 'Brand mentions across AI platforms',
+      competitorRankings: 'How your brand compares with competitors',
+      citationSources: 'Sources cited in AI answers about your brand',
       citationFooter: '',
-      sentimentSignal: 'How AI describes you',
+      sentimentSignal: 'Sentiment in AI responses about your brand',
     },
     visibility: { score: 0, previousScore: 0, trend: 0, trendDirection: 'stable' },
     metrics: {
