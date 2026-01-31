@@ -1,0 +1,12 @@
+/**
+ * Typography Configuration
+ *
+ * This file imports typography tokens and provides any additional
+ * typography-related styles not covered by tokens.
+ *
+ * Main tokens are in ./tokens/typography.css
+ */
+
+@import "./tokens/typography.css";
+
+/* Any additional global typography styles can go here */

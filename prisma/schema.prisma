@@ -1,0 +1,897 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model alert_channels {
+  workspace_id String    @db.Uuid
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  type         String    @db.VarChar(20)
+  config       Json
+  enabled      Boolean?  @default(true)
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  updated_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_alert_channels_workspace")
+}
+
+model alert_history {
+  workspace_id  String       @db.Uuid
+  id            Int          @id @default(autoincrement())
+  rule_id       Int?
+  status        String?      @default("pending") @db.VarChar(20)
+  message       String
+  data          Json?
+  channels_sent Json?
+  triggered_at  DateTime?    @default(now()) @db.Timestamp(6)
+  sent_at       DateTime?    @db.Timestamp(6)
+  error         String?
+  alert_rules   alert_rules? @relation(fields: [rule_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "alert_history_rule_id_alert_rules_id_fk")
+
+  @@index([rule_id, triggered_at], map: "idx_alert_history_rule_triggered")
+  @@index([status], map: "idx_alert_history_status")
+  @@index([workspace_id], map: "idx_alert_history_workspace")
+}
+
+model alert_rules {
+  workspace_id      String          @db.Uuid
+  id                Int             @id @default(autoincrement())
+  name              String          @db.VarChar(100)
+  type              String          @db.VarChar(50)
+  threshold         Float           @db.Real
+  time_window_hours Int?            @default(24)
+  enabled           Boolean?        @default(true)
+  description       String?
+  created_at        DateTime?       @default(now()) @db.Timestamp(6)
+  updated_at        DateTime?       @default(now()) @db.Timestamp(6)
+  alert_history     alert_history[]
+
+  @@index([type, enabled], map: "idx_alert_rules_type_enabled")
+  @@index([workspace_id], map: "idx_alert_rules_workspace")
+}
+
+model analytics {
+  workspace_id       String    @db.Uuid
+  id                 Int       @id @default(autoincrement())
+  date               DateTime? @default(now()) @db.Timestamp(6)
+  total_prompts      Int?      @default(0)
+  brand_mention_rate Float?    @default(0) @db.Real
+  top_competitor     String?
+  total_sources      Int?      @default(0)
+  total_domains      Int?      @default(0)
+
+  @@index([workspace_id], map: "idx_analytics_workspace")
+}
+
+model api_rate_limit_settings {
+  id                      Int       @id @default(autoincrement())
+  platform                String    @db.VarChar(30)
+  max_concurrent          Int?      @default(3)
+  requests_per_minute     Int?      @default(60)
+  retry_after_ms          Int?      @default(1000)
+  daily_budget            Int?      @default(0)
+  respect_platform_limits Boolean?  @default(true)
+  created_at              DateTime? @default(now()) @db.Timestamp(6)
+  updated_at              DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([platform], map: "idx_rate_limit_platform")
+}
+
+model bot_visits {
+  workspace_id         String    @db.Uuid
+  id                   Int       @id @default(autoincrement())
+  bot_type             String    @db.VarChar(50)
+  user_agent           String
+  url                  String
+  visited_at           DateTime  @db.Timestamp(6)
+  status_code          Int?
+  response_time_ms     Int?
+  content_type         String?   @db.VarChar(100)
+  content_length_bytes Int?
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([bot_type], map: "idx_bot_visits_bot_type")
+  @@index([visited_at], map: "idx_bot_visits_visited_at")
+  @@index([workspace_id], map: "idx_bot_visits_workspace")
+}
+
+model brand_aliases {
+  workspace_id     String    @db.Uuid
+  id               Int       @id @default(autoincrement())
+  brand_id         String    @db.VarChar(100)
+  alias            String    @db.VarChar(200)
+  normalized_alias String    @db.VarChar(200)
+  alias_type       String    @db.VarChar(20)
+  match_partial    Boolean?  @default(false)
+  is_primary       Boolean?  @default(false)
+  confidence       Float?    @default(1) @db.Real
+  deleted_at       DateTime? @db.Timestamp(6)
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+  updated_at       DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([deleted_at], map: "idx_brand_aliases_active")
+  @@index([brand_id], map: "idx_brand_aliases_brand_id")
+  @@index([normalized_alias], map: "idx_brand_aliases_normalized")
+  @@index([workspace_id], map: "idx_brand_aliases_workspace")
+}
+
+model brand_config {
+  workspace_id    String    @db.Uuid
+  id              Int       @id @default(autoincrement())
+  name            String    @db.VarChar(200)
+  domain          String?   @db.VarChar(255)
+  aliases         Json?     @default("[]")
+  competitor_list Json?     @default("[]")
+  industry        String?   @db.VarChar(100)
+  metadata        Json?     @default("{}")
+  is_active       Boolean?  @default(true)
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+  updated_at      DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_brand_config_workspace")
+}
+
+model competitors {
+  workspace_id       String    @db.Uuid
+  id                 Int       @id @default(autoincrement())
+  name               String
+  category           String?
+  mention_count      Int?      @default(0)
+  last_mentioned     DateTime? @db.Timestamp(6)
+  domain             String?   @db.VarChar(255)
+  initial_score      Int?
+  platforms_found    Json?
+  discovered_prompts Json?
+
+  @@unique([workspace_id, name], map: "idx_competitors_workspace_name")
+  @@index([workspace_id], map: "idx_competitors_workspace")
+}
+
+model experiment_results {
+  workspace_id    String          @db.Uuid
+  id              Int             @id @default(autoincrement())
+  experiment_id   Int
+  variant_id      Int
+  sample_size     Int?            @default(0)
+  avg_visibility  Float?          @db.Real
+  std_visibility  Float?          @db.Real
+  avg_mentions    Float?          @db.Real
+  avg_position    Float?          @db.Real
+  success_rate    Float?          @db.Real
+  chi_squared     Float?          @db.Real
+  p_value         Float?          @db.Real
+  ci_lower        Float?          @db.Real
+  ci_upper        Float?          @db.Real
+  calculated_at   DateTime?       @default(now()) @db.Timestamp(6)
+  experiments     experiments     @relation(fields: [experiment_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "experiment_results_experiment_id_experiments_id_fk")
+  prompt_variants prompt_variants @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "experiment_results_variant_id_prompt_variants_id_fk")
+
+  @@index([experiment_id], map: "idx_experiment_results_experiment")
+  @@index([experiment_id, variant_id], map: "idx_experiment_results_unique")
+  @@index([workspace_id], map: "idx_experiment_results_workspace")
+}
+
+model experiment_variants {
+  workspace_id       String          @db.Uuid
+  id                 Int             @id @default(autoincrement())
+  experiment_id      Int
+  variant_id         Int
+  traffic_allocation Int?            @default(50)
+  created_at         DateTime?       @default(now()) @db.Timestamp(6)
+  experiments        experiments     @relation(fields: [experiment_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "experiment_variants_experiment_id_experiments_id_fk")
+  prompt_variants    prompt_variants @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "experiment_variants_variant_id_prompt_variants_id_fk")
+
+  @@index([experiment_id], map: "idx_experiment_variants_experiment")
+  @@index([variant_id], map: "idx_experiment_variants_variant")
+  @@index([workspace_id], map: "idx_experiment_variants_workspace")
+}
+
+model experiments {
+  workspace_id          String                @db.Uuid
+  id                    Int                   @id @default(autoincrement())
+  name                  String                @db.VarChar(200)
+  description           String?
+  status                String?               @default("draft") @db.VarChar(20)
+  started_at            DateTime?             @db.Timestamp(6)
+  ended_at              DateTime?             @db.Timestamp(6)
+  min_sample_size       Int?                  @default(30)
+  confidence_level      Float?                @default(0.95) @db.Real
+  winner_variant_id     Int?
+  significance_achieved Boolean?              @default(false)
+  created_at            DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?             @default(now()) @db.Timestamp(6)
+  experiment_results    experiment_results[]
+  experiment_variants   experiment_variants[]
+
+  @@index([status], map: "idx_experiments_status")
+  @@index([workspace_id], map: "idx_experiments_workspace")
+}
+
+model export_backup_config {
+  workspace_id          String    @db.Uuid
+  id                    Int       @id @default(autoincrement())
+  auto_export_frequency String?   @default("never") @db.VarChar(20)
+  export_format         String?   @default("json") @db.VarChar(10)
+  destination_type      String?   @default("local") @db.VarChar(20)
+  destination_config    Json?     @default("{}")
+  retention_days        Int?      @default(90)
+  include_raw_responses Boolean?  @default(false)
+  last_export_at        DateTime? @db.Timestamp(6)
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+  updated_at            DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_export_backup_config_workspace")
+}
+
+model intelligence_searches {
+  workspace_id String    @db.Uuid
+  id           Int       @id @default(autoincrement())
+  domain       String
+  brand_name   String?
+  brand_logo   String?
+  user_id      Int?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([created_at], map: "idx_intelligence_searches_created_at")
+  @@index([user_id], map: "idx_intelligence_searches_user_id")
+  @@index([workspace_id], map: "idx_intelligence_searches_workspace")
+}
+
+model logos {
+  domain       String   @id @db.VarChar(255)
+  logo_url     String
+  source       String   @db.VarChar(30)
+  fetched_at   DateTime @default(now()) @db.Timestamp(6)
+  content_type String?  @db.VarChar(50)
+}
+
+model notification_preferences {
+  workspace_id               String    @db.Uuid
+  id                         Int       @id @default(autoincrement())
+  user_id                    String?   @default("default") @db.VarChar(64)
+  email_frequency            String?   @default("daily") @db.VarChar(20)
+  email_addresses            Json?     @default("[]")
+  visibility_drop_threshold  Float?    @default(10) @db.Real
+  competitor_surge_threshold Float?    @default(20) @db.Real
+  sentiment_shift_threshold  Float?    @default(15) @db.Real
+  receive_summary_reports    Boolean?  @default(true)
+  quiet_hours                Json?
+  created_at                 DateTime? @default(now()) @db.Timestamp(6)
+  updated_at                 DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_notification_preferences_workspace")
+}
+
+model personas {
+  workspace_id String    @db.Uuid
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  country      String?   @db.VarChar(2)
+  description  String?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  prompts      prompts[]
+
+  @@index([workspace_id], map: "idx_personas_workspace")
+}
+
+model platform_settings {
+  workspace_id      String    @db.Uuid
+  id                Int       @id @default(autoincrement())
+  platform          String    @db.VarChar(30)
+  enabled           Boolean?  @default(true)
+  priority          Int?      @default(10)
+  api_key_encrypted String?
+  budget_limit_usd  Float?    @db.Real
+  config            Json?     @default("{}")
+  created_at        DateTime? @default(now()) @db.Timestamp(6)
+  updated_at        DateTime? @default(now()) @db.Timestamp(6)
+
+  @@unique([workspace_id, platform], map: "idx_platform_settings_workspace_platform")
+  @@index([platform], map: "idx_platform_settings_platform")
+  @@index([workspace_id], map: "idx_platform_settings_workspace")
+}
+
+model platforms {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug                  String    @unique(map: "idx_platforms_slug") @db.VarChar(50)
+  name                  String    @db.VarChar(100)
+  icon_url              String?
+  is_active             Boolean?  @default(true)
+  rate_limit_rpm        Int
+  rate_limit_concurrent Int
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model priority_queue_settings {
+  workspace_id          String    @db.Uuid
+  id                    Int       @id @default(autoincrement())
+  max_queue_size        Int?      @default(100)
+  default_priority      Int?      @default(5)
+  auto_process_priority Boolean?  @default(true)
+  ordering_strategy     String?   @default("priority") @db.VarChar(20)
+  priority_rules        Json?     @default("[]")
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+  updated_at            DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_priority_queue_settings_workspace")
+}
+
+model prompt_performance_metrics {
+  workspace_id         String    @db.Uuid
+  id                   Int       @id @default(autoincrement())
+  prompt_id            Int
+  execution_count      Int?      @default(0)
+  brand_mention_count  Int?      @default(0)
+  avg_visibility_score Float?    @db.Real
+  avg_position         Float?    @db.Real
+  avg_sentiment        Float?    @db.Real
+  success_rate         Float?    @db.Real
+  avg_response_time_ms Int?
+  last_calculated_at   DateTime? @db.Timestamp(6)
+  last_executed_at     DateTime? @db.Timestamp(6)
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+  prompts              prompts   @relation(fields: [prompt_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_performance_metrics_prompt_id_prompts_id_fk")
+
+  @@index([prompt_id], map: "idx_prompt_performance_prompt")
+  @@index([avg_visibility_score], map: "idx_prompt_performance_visibility")
+  @@index([workspace_id], map: "idx_prompt_performance_metrics_workspace")
+}
+
+model prompt_priority_queue {
+  workspace_id   String    @db.Uuid
+  id             Int       @id @default(autoincrement())
+  prompt_id      Int
+  priority_level String?   @default("normal") @db.VarChar(20)
+  priority_score Int?      @default(100)
+  reason         String?
+  set_at         DateTime? @default(now()) @db.Timestamp(6)
+  expires_at     DateTime? @db.Timestamp(6)
+  is_active      Boolean?  @default(true)
+  prompts        prompts   @relation(fields: [prompt_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_priority_queue_prompt_id_prompts_id_fk")
+
+  @@index([is_active, priority_score], map: "idx_priority_queue_active")
+  @@index([prompt_id], map: "idx_priority_queue_prompt")
+  @@index([workspace_id], map: "idx_prompt_priority_queue_workspace")
+}
+
+model prompt_schedule_links {
+  workspace_id     String            @db.Uuid
+  id               Int               @id @default(autoincrement())
+  prompt_id        Int?
+  template_id      Int?
+  schedule_id      Int
+  priority         Int?              @default(100)
+  is_active        Boolean?          @default(true)
+  created_at       DateTime?         @default(now()) @db.Timestamp(6)
+  prompts          prompts?          @relation(fields: [prompt_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_schedule_links_prompt_id_prompts_id_fk")
+  scan_schedules   scan_schedules    @relation(fields: [schedule_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_schedule_links_schedule_id_scan_schedules_id_fk")
+  prompt_templates prompt_templates? @relation(fields: [template_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_schedule_links_template_id_prompt_templates_id_fk")
+
+  @@index([prompt_id], map: "idx_prompt_schedule_links_prompt")
+  @@index([schedule_id], map: "idx_prompt_schedule_links_schedule")
+  @@index([workspace_id], map: "idx_prompt_schedule_links_workspace")
+}
+
+model prompt_tags {
+  workspace_id String  @db.Uuid
+  prompt_id    Int
+  tag_id       Int
+  prompts      prompts @relation(fields: [prompt_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "prompt_tags_prompt_id_prompts_id_fk")
+  tags         tags    @relation(fields: [tag_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "prompt_tags_tag_id_tags_id_fk")
+
+  @@id([workspace_id, prompt_id, tag_id], map: "idx_prompt_tags_pk")
+  @@index([tag_id], map: "idx_prompt_tags_tag")
+  @@index([workspace_id], map: "idx_prompt_tags_workspace")
+}
+
+model prompt_template_versions {
+  workspace_id     String           @db.Uuid
+  id               Int              @id @default(autoincrement())
+  template_id      Int
+  version          Int
+  template         String
+  change_notes     String?
+  changed_by       String?          @db.VarChar(100)
+  created_at       DateTime?        @default(now()) @db.Timestamp(6)
+  prompt_templates prompt_templates @relation(fields: [template_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_template_versions_template_id_prompt_templates_id_fk")
+
+  @@index([template_id, version], map: "idx_template_versions_template")
+  @@index([workspace_id], map: "idx_prompt_template_versions_workspace")
+}
+
+model prompt_templates {
+  workspace_id             String                     @db.Uuid
+  id                       Int                        @id @default(autoincrement())
+  name                     String                     @db.VarChar(200)
+  template                 String
+  category                 String?                    @db.VarChar(50)
+  description              String?
+  version                  Int?                       @default(1)
+  is_active                Boolean?                   @default(true)
+  archived_at              DateTime?                  @db.Timestamp(6)
+  created_at               DateTime?                  @default(now()) @db.Timestamp(6)
+  updated_at               DateTime?                  @default(now()) @db.Timestamp(6)
+  prompt_schedule_links    prompt_schedule_links[]
+  prompt_template_versions prompt_template_versions[]
+  template_tags            template_tags[]            @ignore
+
+  @@index([is_active], map: "idx_prompt_templates_active")
+  @@index([category], map: "idx_prompt_templates_category")
+  @@index([workspace_id], map: "idx_prompt_templates_workspace")
+}
+
+model prompt_variants {
+  workspace_id        String                @db.Uuid
+  id                  Int                   @id @default(autoincrement())
+  base_prompt_id      Int
+  variant_label       String                @db.VarChar(10)
+  text                String
+  is_control          Boolean?              @default(false)
+  is_winner           Boolean?              @default(false)
+  created_at          DateTime?             @default(now()) @db.Timestamp(6)
+  experiment_results  experiment_results[]
+  experiment_variants experiment_variants[]
+  prompts             prompts               @relation(fields: [base_prompt_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "prompt_variants_base_prompt_id_prompts_id_fk")
+  variant_performance variant_performance?
+
+  @@index([base_prompt_id], map: "idx_variants_base_prompt")
+  @@index([workspace_id], map: "idx_prompt_variants_workspace")
+}
+
+model prompts {
+  workspace_id               String                       @db.Uuid
+  id                         Int                          @id @default(autoincrement())
+  text                       String
+  topic_id                   Int?
+  topic_ids                  Int[]
+  archived_at                DateTime?                    @db.Timestamp(6)
+  journey_stages             String[]
+  persona_id                 Int?
+  is_priority                Boolean?                     @default(false)
+  last_refreshed_at          DateTime?                    @db.Timestamp(6)
+  refresh_count              Int?                         @default(0)
+  created_at                 DateTime?                    @default(now()) @db.Timestamp(6)
+  prompt_performance_metrics prompt_performance_metrics[]
+  prompt_priority_queue      prompt_priority_queue[]
+  prompt_schedule_links      prompt_schedule_links[]
+  prompt_tags                prompt_tags[]
+  prompt_variants            prompt_variants[]
+  personas                   personas?                    @relation(fields: [persona_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "prompts_persona_id_personas_id_fk")
+  topics                     topics?                      @relation(fields: [topic_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "prompts_topic_id_topics_id_fk")
+  refresh_history            refresh_history[]
+  request_queue              request_queue[]
+  responses                  responses[]
+  usage_events               usage_events[]
+
+  @@index([persona_id], map: "idx_prompts_persona")
+  @@index([is_priority], map: "idx_prompts_priority")
+  @@index([workspace_id], map: "idx_prompts_workspace")
+}
+
+model quality_aggregates {
+  workspace_id           String    @db.Uuid
+  id                     Int       @id @default(autoincrement())
+  period_type            String    @db.VarChar(10)
+  period_start           DateTime  @db.Timestamp(6)
+  period_end             DateTime  @db.Timestamp(6)
+  response_count         Int
+  avg_overall_score      Float?    @db.Real
+  avg_accuracy_score     Float?    @db.Real
+  avg_relevance_score    Float?    @db.Real
+  avg_recency_score      Float?    @db.Real
+  avg_completeness_score Float?    @db.Real
+  level_counts           Json?
+  issue_counts           Json?
+  inclusion_rate         Float?    @db.Real
+  created_at             DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([period_type, period_start], map: "idx_quality_aggregates_period")
+  @@index([workspace_id], map: "idx_quality_aggregates_workspace")
+}
+
+model quality_anomalies {
+  workspace_id    String    @db.Uuid
+  id              Int       @id @default(autoincrement())
+  anomaly_type    String    @db.VarChar(30)
+  severity        String    @db.VarChar(10)
+  metric          String    @db.VarChar(50)
+  expected_value  Float?    @db.Real
+  actual_value    Float?    @db.Real
+  deviation       Float?    @db.Real
+  description     String
+  detected_at     DateTime? @default(now()) @db.Timestamp(6)
+  period_start    DateTime? @db.Timestamp(6)
+  period_end      DateTime? @db.Timestamp(6)
+  acknowledged    Boolean?  @default(false)
+  acknowledged_at DateTime? @db.Timestamp(6)
+  notes           String?
+  context         Json?
+
+  @@index([detected_at], map: "idx_quality_anomalies_detected")
+  @@index([severity], map: "idx_quality_anomalies_severity")
+  @@index([acknowledged], map: "idx_quality_anomalies_unack")
+  @@index([workspace_id], map: "idx_quality_anomalies_workspace")
+}
+
+model refresh_history {
+  workspace_id  String    @db.Uuid
+  id            Int       @id @default(autoincrement())
+  prompt_id     Int?
+  scheduled_for DateTime? @db.Timestamp(6)
+  status        String    @db.VarChar(20)
+  started_at    DateTime? @db.Timestamp(6)
+  completed_at  DateTime? @db.Timestamp(6)
+  error         String?
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  prompts       prompts?  @relation(fields: [prompt_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "refresh_history_prompt_id_prompts_id_fk")
+
+  @@index([prompt_id], map: "idx_refresh_history_prompt")
+  @@index([status], map: "idx_refresh_history_status")
+  @@index([workspace_id], map: "idx_refresh_history_workspace")
+}
+
+model refresh_scheduling_settings {
+  workspace_id            String    @db.Uuid
+  id                      Int       @id @default(autoincrement())
+  default_interval_hours  Int?      @default(168)
+  priority_interval_hours Int?      @default(24)
+  blackout_periods        Json?     @default("[]")
+  batch_size              Int?      @default(50)
+  concurrency_limit       Int?      @default(5)
+  auto_refresh_enabled    Boolean?  @default(true)
+  created_at              DateTime? @default(now()) @db.Timestamp(6)
+  updated_at              DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_refresh_scheduling_settings_workspace")
+}
+
+model request_queue {
+  workspace_id  String    @db.Uuid
+  id            Int       @id @default(autoincrement())
+  prompt_id     Int?
+  platform      String    @db.VarChar(20)
+  status        String?   @default("pending") @db.VarChar(20)
+  priority      String?   @default("normal") @db.VarChar(10)
+  retry_count   Int?      @default(0)
+  scheduled_for DateTime? @db.Timestamp(6)
+  started_at    DateTime? @db.Timestamp(6)
+  completed_at  DateTime? @db.Timestamp(6)
+  error_message String?
+  metadata      Json?
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+  prompts       prompts?  @relation(fields: [prompt_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "request_queue_prompt_id_prompts_id_fk")
+
+  @@index([completed_at], map: "idx_queue_completed_at")
+  @@index([status], map: "idx_queue_pending")
+  @@index([status, platform], map: "idx_queue_status_platform")
+  @@index([workspace_id], map: "idx_request_queue_workspace")
+}
+
+model response_quality_scores {
+  workspace_id       String    @db.Uuid
+  id                 Int       @id @default(autoincrement())
+  response_id        Int       @unique(map: "response_quality_scores_response_id_unique")
+  overall_score      Int
+  quality_level      String    @db.VarChar(20)
+  accuracy_score     Int
+  relevance_score    Int
+  recency_score      Int
+  completeness_score Int
+  issues             Json?
+  include_in_metrics Boolean?  @default(true)
+  exclusion_reason   String?
+  created_at         DateTime? @default(now()) @db.Timestamp(6)
+  responses          responses @relation(fields: [response_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "response_quality_scores_response_id_responses_id_fk")
+
+  @@index([created_at], map: "idx_quality_scores_created_at")
+  @@index([include_in_metrics], map: "idx_quality_scores_include")
+  @@index([quality_level], map: "idx_quality_scores_level")
+  @@index([workspace_id], map: "idx_response_quality_scores_workspace")
+}
+
+model responses {
+  workspace_id            String                   @db.Uuid
+  id                      Int                      @id @default(autoincrement())
+  prompt_id               Int
+  platform                String?                  @default("unknown") @db.VarChar(30)
+  text                    String
+  brand_mentioned         Boolean?                 @default(false)
+  competitors_mentioned   String[]
+  sources                 String[]
+  created_at              DateTime?                @default(now()) @db.Timestamp(6)
+  response_quality_scores response_quality_scores?
+  prompts                 prompts                  @relation(fields: [prompt_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "responses_prompt_id_prompts_id_fk")
+
+  @@index([platform], map: "idx_responses_platform")
+  @@index([workspace_id], map: "idx_responses_workspace")
+}
+
+model scan_schedules {
+  workspace_id          String                  @db.Uuid
+  id                    Int                     @id @default(autoincrement())
+  frequency             String                  @db.VarChar(20)
+  platforms             Json
+  next_run              DateTime?               @db.Timestamp(6)
+  last_run              DateTime?               @db.Timestamp(6)
+  enabled               Boolean?                @default(true)
+  created_at            DateTime?               @default(now()) @db.Timestamp(6)
+  prompt_schedule_links prompt_schedule_links[]
+
+  @@index([workspace_id], map: "idx_scan_schedules_workspace")
+}
+
+model scrape_attempts {
+  workspace_id     String    @db.Uuid
+  id               Int       @id @default(autoincrement())
+  prompt_id        Int?
+  platform         String
+  method           String
+  success          Boolean
+  cost             Float?    @default(0) @db.Real
+  response_time_ms Int?
+  error_type       String?
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_scrape_attempts_workspace")
+}
+
+model settings_audit_log {
+  workspace_id    String    @db.Uuid
+  id              Int       @id @default(autoincrement())
+  table_name      String    @db.VarChar(50)
+  record_id       Int?
+  action          String    @db.VarChar(10)
+  user_id         String?   @default("system") @db.VarChar(64)
+  previous_values Json?
+  new_values      Json?
+  ip_address      String?   @db.VarChar(45)
+  user_agent      String?
+  changed_at      DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([changed_at], map: "idx_audit_changed_at")
+  @@index([table_name, action], map: "idx_audit_table_action")
+  @@index([workspace_id], map: "idx_settings_audit_log_workspace")
+}
+
+model shared_reports {
+  workspace_id     String    @db.Uuid
+  id               Int       @id @default(autoincrement())
+  public_id        String    @unique(map: "shared_reports_public_id_unique") @db.VarChar(64)
+  title            String    @db.VarChar(200)
+  date_range_start DateTime? @db.Timestamp(6)
+  date_range_end   DateTime? @db.Timestamp(6)
+  sections         Json
+  expires_at       DateTime? @db.Timestamp(6)
+  view_count       Int?      @default(0)
+  revoked          Boolean?  @default(false)
+  created_at       DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([public_id], map: "idx_shared_reports_public_id")
+  @@index([workspace_id], map: "idx_shared_reports_workspace")
+}
+
+model site_audits {
+  workspace_id    String    @db.Uuid
+  id              Int       @id @default(autoincrement())
+  url             String
+  score           Int
+  checks          Json
+  recommendations Json
+  created_at      DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_site_audits_workspace")
+}
+
+model sources {
+  workspace_id   String    @db.Uuid
+  id             Int       @id @default(autoincrement())
+  domain         String
+  url            String
+  title          String?
+  citation_count Int?      @default(0)
+  last_cited     DateTime? @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_sources_workspace")
+}
+
+model tags {
+  workspace_id  String          @db.Uuid
+  id            Int             @id @default(autoincrement())
+  name          String          @db.VarChar(50)
+  color         String?         @db.VarChar(7)
+  created_at    DateTime?       @default(now()) @db.Timestamp(6)
+  prompt_tags   prompt_tags[]
+  template_tags template_tags[]
+
+  @@index([workspace_id], map: "idx_tags_workspace")
+}
+
+model template_categories {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique(map: "template_categories_name_unique") @db.VarChar(50)
+  description String?
+  parent_id   Int?
+  sort_order  Int?      @default(0)
+  color       String?   @db.VarChar(7)
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model template_tags {
+  workspace_id     String           @db.Uuid
+  template_id      Int
+  tag_id           Int
+  tags             tags             @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "template_tags_tag_id_tags_id_fk")
+  prompt_templates prompt_templates @relation(fields: [template_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "template_tags_template_id_prompt_templates_id_fk")
+
+  @@id([workspace_id, template_id, tag_id], map: "idx_template_tags_pk")
+  @@index([tag_id], map: "idx_template_tags_tag")
+  @@index([workspace_id], map: "idx_template_tags_workspace")
+}
+
+model template_variables {
+  id            Int       @id @default(autoincrement())
+  name          String    @unique(map: "template_variables_name_unique") @db.VarChar(50)
+  label         String    @db.VarChar(100)
+  description   String?
+  default_value String?
+  is_required   Boolean?  @default(false)
+  variable_type String?   @default("text") @db.VarChar(20)
+  created_at    DateTime? @default(now()) @db.Timestamp(6)
+}
+
+model topics {
+  workspace_id String    @db.Uuid
+  id           Int       @id @default(autoincrement())
+  name         String
+  description  String?
+  created_at   DateTime? @default(now()) @db.Timestamp(6)
+  prompts      prompts[]
+
+  @@index([workspace_id], map: "idx_topics_workspace")
+}
+
+model usage_events {
+  workspace_id       String    @db.Uuid
+  id                 Int       @id @default(autoincrement())
+  platform           String    @db.VarChar(30)
+  model              String?   @db.VarChar(100)
+  prompt_id          Int?
+  success            Boolean
+  response_time_ms   Int?
+  input_tokens       Int?
+  output_tokens      Int?
+  estimated_cost_usd Float?    @db.Real
+  error_type         String?   @db.VarChar(50)
+  error_message      String?
+  metadata           Json?
+  created_at         DateTime? @default(now()) @db.Timestamp(6)
+  prompts            prompts?  @relation(fields: [prompt_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "usage_events_prompt_id_prompts_id_fk")
+
+  @@index([created_at], map: "idx_usage_events_created_at")
+  @@index([platform], map: "idx_usage_events_platform")
+  @@index([prompt_id], map: "idx_usage_events_prompt")
+  @@index([workspace_id], map: "idx_usage_events_workspace")
+}
+
+model usage_metrics {
+  workspace_id         String    @db.Uuid
+  id                   Int       @id @default(autoincrement())
+  platform             String    @db.VarChar(30)
+  date                 DateTime  @db.Timestamp(6)
+  api_calls            Int?      @default(0)
+  successful_calls     Int?      @default(0)
+  failed_calls         Int?      @default(0)
+  input_tokens         Int?      @default(0)
+  output_tokens        Int?      @default(0)
+  estimated_cost_usd   Float?    @default(0) @db.Real
+  avg_response_time_ms Int?
+  min_response_time_ms Int?
+  max_response_time_ms Int?
+  error_breakdown      Json?
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+  updated_at           DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([date], map: "idx_usage_metrics_date")
+  @@index([platform, date], map: "idx_usage_metrics_platform_date")
+  @@index([workspace_id], map: "idx_usage_metrics_workspace")
+}
+
+model usage_reports {
+  workspace_id         String    @db.Uuid
+  id                   Int       @id @default(autoincrement())
+  report_type          String    @db.VarChar(20)
+  period_start         DateTime  @db.Timestamp(6)
+  period_end           DateTime  @db.Timestamp(6)
+  total_calls          Int?      @default(0)
+  total_successful     Int?      @default(0)
+  total_failed         Int?      @default(0)
+  total_cost_usd       Float?    @default(0) @db.Real
+  total_input_tokens   Int?      @default(0)
+  total_output_tokens  Int?      @default(0)
+  avg_response_time_ms Int?
+  platform_breakdown   Json?
+  top_errors           Json?
+  cost_by_platform     Json?
+  created_at           DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([report_type, period_start], map: "idx_usage_reports_type_start")
+  @@index([workspace_id], map: "idx_usage_reports_workspace")
+}
+
+model user_preferences {
+  workspace_id       String    @db.Uuid
+  id                 Int       @id @default(autoincrement())
+  user_id            String?   @default("default") @db.VarChar(64)
+  theme              String?   @default("system") @db.VarChar(20)
+  default_date_range String?   @default("7d") @db.VarChar(10)
+  default_platform   String?   @db.VarChar(30)
+  display_options    Json?     @default("{}")
+  timezone           String?   @default("UTC") @db.VarChar(50)
+  created_at         DateTime? @default(now()) @db.Timestamp(6)
+  updated_at         DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id], map: "idx_user_preferences_workspace")
+}
+
+model users {
+  id                                                    String              @id @db.VarChar(255)
+  email                                                 String              @unique(map: "idx_users_email") @db.VarChar(255)
+  display_name                                          String?             @db.VarChar(100)
+  avatar_url                                            String?
+  deleted_at                                            DateTime?           @db.Timestamp(6)
+  created_at                                            DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at                                            DateTime?           @default(now()) @db.Timestamp(6)
+  workspace_members_workspace_members_invited_byTousers workspace_members[] @relation("workspace_members_invited_byTousers")
+  workspace_members_workspace_members_user_idTousers    workspace_members[] @relation("workspace_members_user_idTousers")
+  workspaces                                            workspaces[]
+}
+
+model variant_performance {
+  workspace_id    String          @db.Uuid
+  id              Int             @id @default(autoincrement())
+  variant_id      Int             @unique(map: "variant_performance_variant_id_unique")
+  avg_visibility  Float?          @db.Real
+  avg_position    Float?          @db.Real
+  avg_mentions    Float?          @db.Real
+  sample_size     Int?            @default(0)
+  last_calculated DateTime?       @db.Timestamp(6)
+  prompt_variants prompt_variants @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "variant_performance_variant_id_prompt_variants_id_fk")
+
+  @@index([workspace_id], map: "idx_variant_performance_workspace")
+}
+
+model workspace_members {
+  id                                        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspace_id                              String     @db.Uuid
+  user_id                                   String     @db.VarChar(255)
+  role                                      String     @default("member") @db.VarChar(20)
+  invited_by                                String?    @db.VarChar(255)
+  joined_at                                 DateTime?  @default(now()) @db.Timestamp(6)
+  users_workspace_members_invited_byTousers users?     @relation("workspace_members_invited_byTousers", fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "workspace_members_invited_by_users_id_fk")
+  users_workspace_members_user_idTousers    users      @relation("workspace_members_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workspace_members_user_id_users_id_fk")
+  workspaces                                workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "workspace_members_workspace_id_workspaces_id_fk")
+
+  @@unique([workspace_id, user_id], map: "idx_workspace_members_workspace_user")
+  @@index([user_id], map: "idx_workspace_members_user")
+}
+
+model workspaces {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String              @db.VarChar(50)
+  slug              String              @unique(map: "idx_workspaces_slug") @db.VarChar(50)
+  owner_id          String              @db.VarChar(255)
+  plan              String?             @default("free") @db.VarChar(20)
+  deleted_at        DateTime?           @db.Timestamp(6)
+  created_at        DateTime?           @default(now()) @db.Timestamp(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamp(6)
+  workspace_members workspace_members[]
+  users             users               @relation(fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "workspaces_owner_id_users_id_fk")
+
+  @@index([owner_id], map: "idx_workspaces_owner")
+}

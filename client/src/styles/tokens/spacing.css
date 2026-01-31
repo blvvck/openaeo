@@ -1,0 +1,164 @@
+
+
+@layer base {
+  :root {
+    /* ===== SPACING SCALE (8pt Grid) ===== */
+    --space-0: 0;
+    --space-px: 1px;              /* Border widths */
+    --space-0-5: 0.125rem;        /* 2px - micro spacing */
+    --space-1: 0.25rem;           /* 4px - half unit, tight spacing */
+    --space-1-5: 0.375rem;        /* 6px */
+    --space-2: 0.5rem;            /* 8px - 1 unit, icon gaps */
+    --space-2-5: 0.625rem;        /* 10px */
+    --space-3: 0.75rem;           /* 12px - 1.5 units */
+    --space-3-5: 0.875rem;        /* 14px */
+    --space-4: 1rem;              /* 16px - 2 units, standard */
+    --space-5: 1.25rem;           /* 20px - 2.5 units */
+    --space-6: 1.5rem;            /* 24px - 3 units, cards */
+    --space-7: 1.75rem;           /* 28px */
+    --space-8: 2rem;              /* 32px - 4 units, sections */
+    --space-9: 2.25rem;           /* 36px */
+    --space-10: 2.5rem;           /* 40px - 5 units */
+    --space-11: 2.75rem;          /* 44px */
+    --space-12: 3rem;             /* 48px - 6 units */
+    --space-14: 3.5rem;           /* 56px */
+    --space-16: 4rem;             /* 64px - 8 units */
+    --space-20: 5rem;             /* 80px - 10 units, page sections */
+    --space-24: 6rem;             /* 96px - 12 units, major sections */
+    --space-28: 7rem;             /* 112px */
+    --space-32: 8rem;             /* 128px */
+    --space-36: 9rem;             /* 144px */
+    --space-40: 10rem;            /* 160px */
+    --space-44: 11rem;            /* 176px */
+    --space-48: 12rem;            /* 192px */
+    --space-52: 13rem;            /* 208px */
+    --space-56: 14rem;            /* 224px */
+    --space-60: 15rem;            /* 240px */
+    --space-64: 16rem;            /* 256px */
+    --space-72: 18rem;            /* 288px */
+    --space-80: 20rem;            /* 320px */
+    --space-96: 24rem;            /* 384px */
+
+    /* ===== COMPONENT-SPECIFIC SPACING ===== */
+
+    /* Cards */
+    --card-padding: var(--space-6);           /* 24px */
+    --card-padding-compact: var(--space-4);   /* 16px */
+    --card-gap: var(--space-4);               /* 16px between cards */
+
+    /* Buttons */
+    --button-padding-y: var(--space-2);       /* 8px vertical */
+    --button-padding-x: var(--space-4);       /* 16px horizontal */
+    --button-padding-y-sm: var(--space-1-5);  /* 6px small button */
+    --button-padding-x-sm: var(--space-3);    /* 12px small button */
+    --button-padding-y-lg: var(--space-3);    /* 12px large button */
+    --button-padding-x-lg: var(--space-6);    /* 24px large button */
+    --button-icon-gap: var(--space-2);        /* 8px gap to icon */
+
+    /* Inputs */
+    --input-padding-y: var(--space-2);        /* 8px vertical */
+    --input-padding-x: var(--space-3);        /* 12px horizontal */
+
+    /* Tables */
+    --table-cell-padding-y: var(--space-3);   /* 12px vertical */
+    --table-cell-padding-x: var(--space-4);   /* 16px horizontal */
+    --table-header-padding-y: var(--space-3-5); /* 14px */
+
+    /* Sidebar */
+    --sidebar-width: 15rem;                   /* 240px */
+    --sidebar-width-collapsed: 4rem;          /* 64px */
+    --sidebar-item-padding-y: var(--space-2-5); /* 10px - more breathing room */
+    --sidebar-item-padding-x: var(--space-3); /* 12px */
+    --sidebar-group-gap: var(--space-6);      /* 24px between groups */
+    --sidebar-item-gap: var(--space-1-5);     /* 6px between items */
+
+    /* Form */
+    --form-label-gap: var(--space-2);         /* 8px label to input */
+    --form-field-gap: var(--space-4);         /* 16px between fields */
+    --form-section-gap: var(--space-8);       /* 32px between sections */
+
+    /* Section */
+    --section-gap: var(--space-8);            /* 32px between sections */
+    --section-padding-y: var(--space-8);      /* 32px vertical */
+    --section-content-gap: var(--space-6);    /* 24px content gap */
+
+    /* Page */
+    --page-padding-x: var(--space-4);         /* 16px mobile */
+    --page-padding-x-md: var(--space-6);      /* 24px tablet */
+    --page-padding-x-lg: var(--space-8);      /* 32px desktop */
+    --page-max-width: 80rem;                  /* 1280px */
+
+    /* Modal/Dialog */
+    --modal-padding: var(--space-6);          /* 24px */
+    --modal-gap: var(--space-4);              /* 16px between elements */
+
+    /* Badge */
+    --badge-padding-y: var(--space-0-5);      /* 2px vertical */
+    --badge-padding-x: var(--space-2);        /* 8px horizontal */
+
+    /* Toast */
+    --toast-padding: var(--space-4);          /* 16px */
+    --toast-gap: var(--space-3);              /* 12px */
+
+    /* Stack gaps (flex/grid column layouts) */
+    --stack-gap-xs: var(--space-1);           /* 4px */
+    --stack-gap-sm: var(--space-2);           /* 8px */
+    --stack-gap-md: var(--space-4);           /* 16px */
+    --stack-gap-lg: var(--space-6);           /* 24px */
+    --stack-gap-xl: var(--space-8);           /* 32px */
+
+    /* Inline gaps (flex row layouts) */
+    --inline-gap-xs: var(--space-1);          /* 4px */
+    --inline-gap-sm: var(--space-2);          /* 8px */
+    --inline-gap-md: var(--space-3);          /* 12px */
+    --inline-gap-lg: var(--space-4);          /* 16px */
+  }
+}
+
+@layer utilities {
+  /* ===== STACK UTILITIES (Vertical spacing) ===== */
+  .stack-xs { gap: var(--stack-gap-xs); }
+  .stack-sm { gap: var(--stack-gap-sm); }
+  .stack-md { gap: var(--stack-gap-md); }
+  .stack-lg { gap: var(--stack-gap-lg); }
+  .stack-xl { gap: var(--stack-gap-xl); }
+
+  /* ===== INLINE UTILITIES (Horizontal spacing) ===== */
+  .inline-xs { gap: var(--inline-gap-xs); }
+  .inline-sm { gap: var(--inline-gap-sm); }
+  .inline-md { gap: var(--inline-gap-md); }
+  .inline-lg { gap: var(--inline-gap-lg); }
+
+  /* ===== SECTION UTILITIES ===== */
+  .section {
+    padding-top: var(--section-padding-y);
+    padding-bottom: var(--section-padding-y);
+  }
+
+  .section-gap {
+    margin-top: var(--section-gap);
+  }
+
+  /* ===== CONTAINER UTILITIES ===== */
+  .container-page {
+    max-width: var(--page-max-width);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--page-padding-x);
+    padding-right: var(--page-padding-x);
+  }
+
+  @media (min-width: 768px) {
+    .container-page {
+      padding-left: var(--page-padding-x-md);
+      padding-right: var(--page-padding-x-md);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container-page {
+      padding-left: var(--page-padding-x-lg);
+      padding-right: var(--page-padding-x-lg);
+    }
+  }
+}

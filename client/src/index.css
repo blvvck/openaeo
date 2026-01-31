@@ -1,0 +1,165 @@
+@import "./styles/theme.css";
+@import "./styles/typography.css";
+@import "./styles/animations.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* OpenAEO uses quiet scroll rails that become visible only where content moves. */
+::-webkit-scrollbar {
+  width: 0.55rem;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-muted);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: content-box;
+}
+
+/* Thin scrollbar that only shows on hover */
+.scrollbar-hover-only {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-hover-only::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+.scrollbar-hover-only::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-hover-only::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.scrollbar-hover-only:hover {
+  scrollbar-color: var(--gray-300) transparent;
+}
+
+.scrollbar-hover-only:hover::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+}
+
+.dark .scrollbar-hover-only:hover {
+  scrollbar-color: var(--gray-600) transparent;
+}
+
+.dark .scrollbar-hover-only:hover::-webkit-scrollbar-thumb {
+  background: var(--gray-600);
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* Custom focus styles using brand colors */
+.focus-visible:focus-visible {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+
+.dark .focus-visible:focus-visible {
+  outline-color: var(--primary-400);
+}
+
+/* Fix Recharts scroll blocking - allow vertical scroll to pass through SVG charts
+ * This fixes scroll "sticking" on mobile/touch devices when scrolling over charts.
+ * Targets all Recharts elements that might capture touch events.
+ */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-responsive-container,
+.recharts-tooltip-wrapper {
+  touch-action: pan-y !important;
+}
+
+/* Print styles for PDF export */
+@media print {
+  /* Hide app chrome */
+  nav,
+  aside,
+  [role="complementary"],
+  [data-sidebar],
+  .sidebar,
+  header:not([data-print]),
+  footer:not([data-print]) {
+    display: none !important;
+  }
+
+  /* Hide any floating UI elements */
+  [role="dialog"],
+  [role="tooltip"],
+  .toast,
+  .notification {
+    display: none !important;
+  }
+
+  /* Make main content full width */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Ensure colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Remove shadows and simplify borders for print */
+  .shadow,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+
+  /* Prevent page breaks inside cards */
+  .card,
+  [data-card] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Add header to printed pages */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+}
