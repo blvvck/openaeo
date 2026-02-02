@@ -6,12 +6,14 @@ type UnauthorizedMode = "returnNull" | "throw";
 let tokenReader: TokenReader | undefined;
 let authenticatedScope: string | null = null;
 let activeWorkspaceId: string | null = null;
+let workspaceDemoById = new Map<string, boolean>();
 const activeWorkspaceStorageKey = "openaeo.activeWorkspaceId";
 
 export interface AccessibleWorkspace {
   id: string;
   name: string;
   slug: string;
+  is_demo: boolean;
   role: string;
   onboarding_completed_at: string | null;
 }
@@ -25,12 +27,14 @@ export function configureWorkspaceTokenReader(readToken: TokenReader, scope: str
   if (authenticatedScope !== null && authenticatedScope !== scope) {
     workspaceQueryClient.clear();
     activeWorkspaceId = null;
+    workspaceDemoById = new Map();
   }
   authenticatedScope = scope;
   tokenReader = readToken;
 }
 
 export function selectWorkspaceForSession(workspaces: AccessibleWorkspace[], fallbackId: string): string {
+  workspaceDemoById = new Map(workspaces.map(({ id, is_demo }) => [id, is_demo]));
   const storedId = localStorage.getItem(activeWorkspaceStorageKey);
   const selectedId = workspaces.find(({ id }) => id === storedId)?.id
     ?? workspaces.find(({ id }) => id === fallbackId)?.id
@@ -43,6 +47,10 @@ export function selectWorkspaceForSession(workspaces: AccessibleWorkspace[], fal
 
 export function getActiveWorkspaceId(): string | null {
   return activeWorkspaceId;
+}
+
+export function isActiveWorkspaceDemo(): boolean {
+  return activeWorkspaceId !== null && workspaceDemoById.get(activeWorkspaceId) === true;
 }
 
 export function setActiveWorkspace(id: string): void {

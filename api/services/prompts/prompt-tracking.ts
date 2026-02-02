@@ -4,6 +4,7 @@ import { currentWorkspaceId, runInWorkspace, runInWorkspaceTransaction } from ".
 import { storage } from "../../data";
 import { prisma, prismaRoot } from "../../prisma";
 import { BrandMonitor } from "../analysis/brand-monitor";
+import { canScheduleWorkspace } from "./scheduler-workspace";
 
 export const PROMPT_FREQUENCIES = ["daily", "7d", "14d", "30d"] as const;
 export type PromptFrequency = (typeof PROMPT_FREQUENCIES)[number];
@@ -179,10 +180,11 @@ async function checkDueWorkspaces(): Promise<void> {
   checkingWorkspaces = true;
   try {
     const workspaces = await prismaRoot.workspaces.findMany({
-      where: { deleted_at: null },
-      select: { id: true },
+      where: { deleted_at: null, is_demo: false },
+      select: { id: true, is_demo: true },
     });
     for (const workspace of workspaces) {
+      if (!canScheduleWorkspace(workspace)) continue;
       try {
         await queueDuePromptRun(workspace.id);
       } catch (error) {

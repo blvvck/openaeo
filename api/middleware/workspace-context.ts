@@ -1,8 +1,10 @@
 import { clerkClient, getAuth } from "@clerk/express";
 import type { NextFunction, Request, Response } from "express";
 import { createHash } from "node:crypto";
+import type { workspaces } from "@prisma/client";
 import { prisma, prismaRoot } from "../prisma";
 import { runInWorkspaceTransaction } from "../context/workspace-context";
+import { demoSlug, ensureDemoWorkspace, isDemoSlugConflict, isDemoWrite, isOwnedDemoWorkspace } from "../services/auth/demo-workspace";
 
 const LEGACY_OWNER_ID = "openaeo-legacy-owner";
 const LEGACY_WORKSPACE_SLUG = "openaeo-legacy";
@@ -58,14 +60,17 @@ async function resolveWorkspaceForUser(userId: string) {
         data: { user_id: userId },
       });
       const claimedWorkspace = await prisma.workspaces.findUniqueOrThrow({ where: { id: legacyWorkspace.id } });
-      return [claimedWorkspace, ...memberships.map(({ workspaces }) => workspaces).filter(({ id }) => id !== claimedWorkspace.id)];
+      return withDemoWorkspace(
+        [claimedWorkspace, ...memberships.map(({ workspaces }) => workspaces).filter(({ id }) => id !== claimedWorkspace.id)],
+        userId,
+      );
     }
   }
 
-  if (memberships.length) return memberships.map(({ workspaces }) => workspaces);
+  if (memberships.length) return withDemoWorkspace(memberships.map(({ workspaces }) => workspaces), userId);
 
   const concurrentMemberships = await findMemberships();
-  if (concurrentMemberships.length) return concurrentMemberships.map(({ workspaces }) => workspaces);
+  if (concurrentMemberships.length) return withDemoWorkspace(concurrentMemberships.map(({ workspaces }) => workspaces), userId);
 
   const slug = `ws-${createHash("sha256").update(userId).digest("hex").slice(0, 20)}`;
   const workspace = await prisma.workspaces.upsert({
@@ -80,7 +85,33 @@ async function resolveWorkspaceForUser(userId: string) {
     update: {},
   });
 
-  return [workspace];
+  return withDemoWorkspace([workspace], userId);
+}
+
+async function withDemoWorkspace(
+  workspaces: workspaces[],
+  userId: string,
+) {
+  const slug = demoSlug(userId);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const demo = await prismaRoot.$transaction((transaction) => ensureDemoWorkspace(transaction, userId));
+      return [...workspaces.filter(({ id }) => id !== demo.id), demo];
+    } catch (error) {
+      if (!isDemoSlugConflict(error)) throw error;
+      const existing = await prismaRoot.workspaces.findUnique({ where: { slug } });
+      if (existing && isOwnedDemoWorkspace(existing, userId)) {
+        await prismaRoot.workspace_members.upsert({
+          where: { workspace_id_user_id: { workspace_id: existing.id, user_id: userId } },
+          create: { workspace_id: existing.id, user_id: userId, role: "owner" },
+          update: {},
+        });
+        return [...workspaces.filter(({ id }) => id !== existing.id), existing];
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+    }
+  }
+  throw new Error("Demo workspace provisioning did not complete");
 }
 
 export async function workspaceContextMiddleware(
@@ -114,6 +145,14 @@ export async function workspaceContextMiddleware(
 
     if (!workspace) {
       res.status(403).json({ error: "Workspace access denied", code: "WORKSPACE_ACCESS_DENIED" });
+      return;
+    }
+
+    if (workspace.is_demo && isDemoWrite(req.method)) {
+      res.status(403).json({
+        error: "Demo workspace is read-only",
+        code: "DEMO_WORKSPACE_READ_ONLY",
+      });
       return;
     }
 

@@ -896,6 +896,8 @@ model workspaces {
   slug              String              @unique(map: "idx_workspaces_slug") @db.VarChar(50)
   owner_id          String              @db.VarChar(255)
   plan              String?             @default("free") @db.VarChar(20)
+  is_demo           Boolean             @default(false)
+  demo_seed_version Int                 @default(0)
   onboarding_completed_at DateTime?       @db.Timestamp(6)
   deleted_at        DateTime?           @db.Timestamp(6)
   created_at        DateTime?           @default(now()) @db.Timestamp(6)

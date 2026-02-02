@@ -5,8 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkspaceSetup } from "@/components/onboarding/workspace-setup";
 import { AppLoadingScreen } from "@/components/shared/app-loading";
 import { CompetitorRangeMock } from "@/pages/competitor-range-mock";
-import { APP_CONFIG, DEMO_CONFIG } from "@/config/app";
-import { isDemoPreview } from "@/lib/demo-preview";
+import { APP_CONFIG } from "@/config/app";
 import { getActiveWorkspaceId, setActiveWorkspace, workspaceQueryClient, type WorkspaceListResponse } from "./lib/workspace-query";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -198,32 +197,37 @@ function UnifiedSidebarHeader({ workspaces, currentWorkspaceId, onSwitchWorkspac
             <DropdownMenuItem
               key={workspace.id}
               className="cursor-pointer gap-3 py-2.5 px-5"
-              disabled={workspace.id === currentWorkspaceId}
-              onSelect={() => onSwitchWorkspace(workspace.id)}
+              onSelect={() => {
+                if (workspace.id !== currentWorkspaceId) onSwitchWorkspace(workspace.id);
+              }}
             >
               <Building2 className="h-5 w-5 text-figma-secondary shrink-0" />
-              <span className="flex-1 text-figma-sm">{workspace.name}</span>
+              <span className="flex-1 text-figma-sm">{workspace.is_demo ? 'Demo' : workspace.name}</span>
               {workspace.id === currentWorkspaceId && (
                 <span className="text-figma-xs text-primary font-medium">Active</span>
               )}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-figma-xs font-medium text-figma-secondary px-5 py-1.5">Workspace settings</DropdownMenuLabel>
-          <DropdownMenuItem
-            className="cursor-pointer gap-3 py-2.5 px-5"
-            onClick={() => navigate("/app/settings/brand")}
-          >
-            <Settings className="h-5 w-5 text-figma-secondary shrink-0" />
-            <span className="text-figma-sm">Workspace setup</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer gap-3 py-2.5 px-5"
-            onClick={() => navigate("/app/settings/integrations")}
-          >
-            <Plug className="h-5 w-5 text-figma-secondary shrink-0" />
-            <span className="text-figma-sm">Integrations</span>
-          </DropdownMenuItem>
+          {!currentWorkspace?.is_demo && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-figma-xs font-medium text-figma-secondary px-5 py-1.5">Workspace settings</DropdownMenuLabel>
+              <DropdownMenuItem
+                className="cursor-pointer gap-3 py-2.5 px-5"
+                onClick={() => navigate("/app/settings/brand")}
+              >
+                <Settings className="h-5 w-5 text-figma-secondary shrink-0" />
+                <span className="text-figma-sm">Workspace setup</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-3 py-2.5 px-5"
+                onClick={() => navigate("/app/settings/integrations")}
+              >
+                <Plug className="h-5 w-5 text-figma-secondary shrink-0" />
+                <span className="text-figma-sm">Integrations</span>
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {/* Collapse button - visible when NOT hovering brand */}
@@ -297,16 +301,10 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth();
   const { signOut } = useClerk();
   const { user } = useUser();
-  const demoPreview = isDemoPreview();
   const { data: workspaceData, isPending: workspacesPending, error: workspaceError } = useQuery<WorkspaceListResponse>({
     queryKey: ["/api/workspaces"],
-    enabled: !demoPreview && isLoaded && Boolean(isSignedIn),
+    enabled: isLoaded && Boolean(isSignedIn),
   });
-  const previewWorkspaceData: WorkspaceListResponse = {
-    workspaces: [{ id: "demo-workspace", name: DEMO_CONFIG.workspaceName, slug: "demo", role: "owner", onboarding_completed_at: new Date().toISOString() }],
-    currentWorkspaceId: "demo-workspace",
-  };
-  const activeWorkspaceData = demoPreview ? previewWorkspaceData : workspaceData;
 
   const handleLogout = async () => {
     localStorage.removeItem('onboarding_completed_steps');
@@ -314,22 +312,22 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     await signOut({ redirectUrl: "/" });
   };
 
-  if (!isLoaded || (!demoPreview && isSignedIn && workspacesPending)) return <AppLoadingScreen />;
-  if (!demoPreview && !isSignedIn) return <RedirectToSignIn />;
-  if (!activeWorkspaceData || (!demoPreview && workspaceError)) {
+  if (!isLoaded || (isSignedIn && workspacesPending)) return <AppLoadingScreen />;
+  if (!isSignedIn) return <RedirectToSignIn />;
+  if (!workspaceData || workspaceError) {
     return <div className="p-6 text-sm text-destructive">Unable to load your workspaces. Refresh to try again.</div>;
   }
 
-  const activeWorkspace = activeWorkspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
-    ?? activeWorkspaceData.workspaces.find(({ id }) => id === activeWorkspaceData.currentWorkspaceId)
-    ?? activeWorkspaceData.workspaces[0];
+  const activeWorkspace = workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())
+    ?? workspaceData.workspaces.find(({ id }) => id === workspaceData.currentWorkspaceId)
+    ?? workspaceData.workspaces[0];
 
   if (activeWorkspace && !activeWorkspace.onboarding_completed_at) {
     return <Redirect to="/onboarding" />;
   }
 
   const handleSwitchWorkspace = (workspaceId: string) => {
-    if (!activeWorkspaceData.workspaces.some(({ id }) => id === workspaceId)) return;
+    if (!workspaceData.workspaces.some(({ id }) => id === workspaceId)) return;
     setActiveWorkspace(workspaceId);
     window.location.reload();
   };
@@ -340,8 +338,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarNav>
           {/* Unified header: app logo + brand switcher in ONE element */}
           <UnifiedSidebarHeader
-            workspaces={activeWorkspaceData.workspaces}
-            currentWorkspaceId={activeWorkspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())?.id ?? activeWorkspaceData.currentWorkspaceId}
+            workspaces={workspaceData.workspaces}
+            currentWorkspaceId={workspaceData.workspaces.find(({ id }) => id === getActiveWorkspaceId())?.id ?? workspaceData.currentWorkspaceId}
             onSwitchWorkspace={handleSwitchWorkspace}
           />
 
@@ -396,13 +394,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
           <GlobalSearch />
           <div className="flex-1" />
           <AccountMenu
-            name={user?.fullName || DEMO_CONFIG.user.name}
-            email={user?.primaryEmailAddress?.emailAddress || DEMO_CONFIG.user.email}
+            name={user?.fullName || "Account"}
+            email={user?.primaryEmailAddress?.emailAddress || "Email not provided"}
             imageUrl={user?.imageUrl}
             onLogout={handleLogout}
           />
         </AppShellHeader>
         <AppShellContent>
+          {activeWorkspace?.is_demo && (
+            <div className="mb-6 rounded-lg border border-figma-border bg-figma-blue-light px-4 py-3 text-figma-sm text-figma-secondary">
+              You are viewing the read-only Demo workspace. Switch to your workspace to make changes.
+            </div>
+          )}
           {children}
         </AppShellContent>
       </AppShellMain>

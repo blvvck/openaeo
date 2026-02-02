@@ -68,7 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       where: { user_id: userId, workspaces: { deleted_at: null } },
       select: {
         role: true,
-        workspaces: { select: { id: true, name: true, slug: true, onboarding_completed_at: true } },
+        workspaces: { select: { id: true, name: true, slug: true, is_demo: true, onboarding_completed_at: true } },
       },
       orderBy: { joined_at: "asc" },
     });
