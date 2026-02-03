@@ -48,6 +48,7 @@ import {
   ContentCard,
   SentimentBadge,
   TableHeader,
+  TablePagination,
   StaleDataWarning,
 } from '@/components/shared';
 import { ErrorState } from '@/components/shared/empty-state';
@@ -159,36 +160,48 @@ function MetricCardsRow({
   activeTab: CitationType | 'all';
   onTabChange: (tab: CitationType) => void;
 }) {
+  const tabMetrics = overview?.tabMetrics;
+  const totalCitations = overview?.total.count ?? 0;
+  const ownedCitations = overview?.byType.owned.count ?? 0;
+  const thirdPartyCitations = overview?.byType.thirdParty.count ?? 0;
+  const socialCitations = overview?.byType.social.count ?? 0;
+
   if (activeTab === 'all') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricStatCard
           label="Total citations"
-          value={overview?.total.count ?? 0}
-          trend={overview?.total.trend}
+          value={totalCitations || '—'}
+          trend={totalCitations ? overview?.total.trend : undefined}
           subtitle="across all sources"
 
         />
         <MetricStatCard
           label="Owned citations"
-          value={`${overview?.byType.owned.count ?? 0} (${overview?.byType.owned.percentage ?? 0}%)`}
-          trend={overview?.byType.owned.trend}
+          value={ownedCitations
+            ? `${ownedCitations} (${overview?.byType.owned.percentage ?? 0}%)`
+            : '—'}
+          trend={ownedCitations ? overview?.byType.owned.trend : undefined}
           subtitle="your domain"
           onClick={() => onTabChange('owned')}
 
         />
         <MetricStatCard
           label="Third-party"
-          value={`${overview?.byType.thirdParty.count ?? 0} (${overview?.byType.thirdParty.percentage ?? 0}%)`}
-          trend={overview?.byType.thirdParty.trend}
+          value={thirdPartyCitations
+            ? `${thirdPartyCitations} (${overview?.byType.thirdParty.percentage ?? 0}%)`
+            : '—'}
+          trend={thirdPartyCitations ? overview?.byType.thirdParty.trend : undefined}
           subtitle="review sites, news"
           onClick={() => onTabChange('third-party')}
 
         />
         <MetricStatCard
           label="Social citations"
-          value={`${overview?.byType.social.count ?? 0} (${overview?.byType.social.percentage ?? 0}%)`}
-          trend={overview?.byType.social.trend}
+          value={socialCitations
+            ? `${socialCitations} (${overview?.byType.social.percentage ?? 0}%)`
+            : '—'}
+          trend={socialCitations ? overview?.byType.social.trend : undefined}
           subtitle="forums, communities"
           onClick={() => onTabChange('social')}
 
@@ -202,28 +215,28 @@ function MetricCardsRow({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricStatCard
           label="Owned citations"
-          value={overview?.byType.owned.count ?? 0}
-          trend={overview?.byType.owned.trend}
+          value={ownedCitations || '—'}
+          trend={ownedCitations ? overview?.byType.owned.trend : undefined}
           subtitle="your domain pages"
 
         />
         <MetricStatCard
           label="Top page"
-          value="/pricing"
+          value={tabMetrics?.owned.topPage ?? '—'}
           subtitle="most cited page"
 
         />
         <MetricStatCard
           label="Pages cited"
-          value={12}
-          trend={2}
+          value={tabMetrics?.owned.pagesCited || '—'}
+          trend={tabMetrics?.owned.pagesCited ? tabMetrics.owned.pagesTrend : undefined}
           subtitle="unique pages"
 
         />
         <MetricStatCard
           label="Avg per page"
-          value="10.6"
-          trend={1}
+          value={tabMetrics?.owned.avgPerPage ?? '—'}
+          trend={tabMetrics?.owned.avgPerPage == null ? undefined : tabMetrics.owned.avgPerPageTrend}
           subtitle="citations per page"
 
         />
@@ -236,28 +249,35 @@ function MetricCardsRow({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricStatCard
           label="Third-party citations"
-          value={overview?.byType.thirdParty.count ?? 0}
-          trend={overview?.byType.thirdParty.trend}
+          value={thirdPartyCitations || '—'}
+          trend={thirdPartyCitations ? overview?.byType.thirdParty.trend : undefined}
           subtitle="review sites, news"
 
         />
         <MetricStatCard
           label="Top source"
-          value={overview?.topSource.domain ?? 'g2.com'}
-          subtitle={`${overview?.topSource.count ?? 47} citations`}
+          value={tabMetrics?.thirdParty.topSource ?? '—'}
+          subtitle={tabMetrics?.thirdParty.topSourceCount
+            ? `${tabMetrics.thirdParty.topSourceCount} citations`
+            : 'Most cited external source'}
 
         />
         <MetricStatCard
           label="Unique sources"
-          value={24}
-          trend={4}
+          value={tabMetrics?.thirdParty.uniqueSources || '—'}
+          trend={tabMetrics?.thirdParty.uniqueSources
+            ? tabMetrics.thirdParty.uniqueSourcesTrend
+            : undefined}
           subtitle="domains citing you"
 
         />
         <MetricStatCard
-          label="Review sites"
-          value="68%"
-          subtitle="of third-party"
+          label="Avg per source"
+          value={tabMetrics?.thirdParty.avgPerSource ?? '—'}
+          trend={tabMetrics?.thirdParty.avgPerSource == null
+            ? undefined
+            : tabMetrics.thirdParty.avgPerSourceTrend}
+          subtitle="citations per source"
 
         />
       </div>
@@ -269,27 +289,31 @@ function MetricCardsRow({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <MetricStatCard
         label="Social citations"
-        value={overview?.byType.social.count ?? 0}
-        trend={overview?.byType.social.trend}
+        value={socialCitations || '—'}
+        trend={socialCitations ? overview?.byType.social.trend : undefined}
         subtitle="communities, forums"
 
       />
       <MetricStatCard
         label="Top platform"
-        value="reddit.com"
-        subtitle="31 citations"
+        value={tabMetrics?.social.topPlatform ?? '—'}
+        subtitle={tabMetrics?.social.platformCitations
+          ? `${tabMetrics.social.platformCitations} citations`
+          : 'Most used AI platform'}
 
       />
       <MetricStatCard
-        label="Unique threads"
-        value={18}
-        trend={3}
-        subtitle="discussions citing you"
+        label="Prompts citing you"
+        value={tabMetrics?.social.promptsCiting || '—'}
+        trend={tabMetrics?.social.promptsCiting
+          ? tabMetrics.social.promptsTrend
+          : undefined}
+        subtitle="distinct prompts"
 
       />
       <MetricStatCard
         label="Sentiment"
-        value="Mixed"
+        value={tabMetrics?.social.sentiment ?? '—'}
         subtitle="overall social tone"
 
       />
@@ -303,8 +327,9 @@ function MetricCardsRow({
 function CitationsTable({
   citations,
   total,
-  hasMore,
-  isLoadingMore,
+  offset,
+  pageSize,
+  isFetching,
   activeTab,
   selectedPlatform,
   selectedSentiment,
@@ -312,13 +337,15 @@ function CitationsTable({
   onPlatformChange,
   onSentimentChange,
   onSearchChange,
-  onLoadMore,
+  onPrevious,
+  onNext,
   onRowClick,
 }: {
   citations: CitationItem[];
   total: number;
-  hasMore: boolean;
-  isLoadingMore?: boolean;
+  offset: number;
+  pageSize: number;
+  isFetching?: boolean;
   activeTab: CitationType | 'all';
   selectedPlatform: string | null;
   selectedSentiment: CitationSentiment | null;
@@ -326,7 +353,8 @@ function CitationsTable({
   onPlatformChange: (platform: string | null) => void;
   onSentimentChange: (sentiment: CitationSentiment | null) => void;
   onSearchChange: (query: string) => void;
-  onLoadMore: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
   onRowClick: (citation: CitationItem) => void;
 }) {
   const isAllTab = activeTab === 'all';
@@ -340,7 +368,7 @@ function CitationsTable({
   return (
     <ContentCard
       title={title}
-      subtitle={`${total} citations found`}
+      subtitle="Sources cited in AI responses about your brand"
       headerRight={
         <FilterBar>
           <FilterSearch
@@ -496,20 +524,14 @@ function CitationsTable({
             ))}
           </div>
 
-          {hasMore && (
-            <div className="flex justify-center pt-4 pb-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLoadMore}
-                disabled={isLoadingMore}
-                className="text-figma-sm"
-              >
-                {isLoadingMore && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Show 25 more
-              </Button>
-            </div>
-          )}
+          <TablePagination
+            offset={offset}
+            pageSize={pageSize}
+            total={total}
+            disabled={isFetching}
+            onPrevious={onPrevious}
+            onNext={onNext}
+          />
         </>
       )}
     </ContentCard>
@@ -767,6 +789,7 @@ export function CitationsPage() {
   const [selectedSentiment, setSelectedSentiment] = useState<CitationSentiment | null>(null);
   const [searchQuery, setSearchQuery] = useState(() => urlParams.get('search') ?? '');
   const [offset, setOffset] = useState(0);
+  const pageSize = 25;
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -793,7 +816,7 @@ export function CitationsPage() {
     platform: selectedPlatform || undefined,
     sentiment: selectedSentiment || undefined,
     search: searchQuery || undefined,
-    limit: 25,
+    limit: pageSize,
     offset,
   });
 
@@ -822,6 +845,21 @@ export function CitationsPage() {
     setOffset(0);
   };
 
+  const handlePlatformChange = (platform: string | null) => {
+    setSelectedPlatform(platform);
+    setOffset(0);
+  };
+
+  const handleSentimentChange = (sentiment: CitationSentiment | null) => {
+    setSelectedSentiment(sentiment);
+    setOffset(0);
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setOffset(0);
+  };
+
   const handleRowClick = (citation: CitationItem) => {
     setSelectedCitationId(citation.id);
   };
@@ -830,9 +868,8 @@ export function CitationsPage() {
     setSelectedCitationId(null);
   };
 
-  const handleLoadMore = () => {
-    setOffset((prev) => prev + 25);
-  };
+  const handlePreviousPage = () => setOffset((prev) => Math.max(0, prev - pageSize));
+  const handleNextPage = () => setOffset((prev) => prev + pageSize);
 
   const handleRetry = () => {
     refetchOverview();
@@ -923,16 +960,18 @@ export function CitationsPage() {
             <CitationsTable
               citations={citationsData?.citations || []}
               total={citationsData?.total || 0}
-              hasMore={citationsData?.hasMore || false}
-              isLoadingMore={citationsFetching && offset > 0}
+              offset={offset}
+              pageSize={pageSize}
+              isFetching={citationsFetching}
               activeTab={activeTab}
               selectedPlatform={selectedPlatform}
               selectedSentiment={selectedSentiment}
               searchQuery={searchQuery}
-              onPlatformChange={setSelectedPlatform}
-              onSentimentChange={setSelectedSentiment}
-              onSearchChange={setSearchQuery}
-              onLoadMore={handleLoadMore}
+              onPlatformChange={handlePlatformChange}
+              onSentimentChange={handleSentimentChange}
+              onSearchChange={handleSearchChange}
+              onPrevious={handlePreviousPage}
+              onNext={handleNextPage}
               onRowClick={handleRowClick}
             />
           </div>

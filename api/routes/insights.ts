@@ -3,6 +3,8 @@
 import { Router, Request, Response } from 'express';
 import { storage } from '../data';
 import { generateInsights, getTopInsights as getTopInsightsFromGenerator, type Insight as GeneratorInsight } from '../services/analytics/insights-generator';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
 import type {
   TopInsightsRequest,
   TopInsightsResponse,
@@ -126,10 +128,10 @@ function setCachedData(cacheKey: string, data: TopInsightsResponse): void {
 router.get('/top', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.query.limit as string, 10) || 3;
-    const workspaceId = req.query.workspaceId as string | undefined;
+    const workspaceId = currentWorkspaceId() ?? 'unscoped';
 
     // Check cache
-    const cacheKey = `insights:top:${limit}:${workspaceId || 'default'}`;
+    const cacheKey = workspaceCacheKey('insights', workspaceId, 'top', String(limit));
     const cachedData = getCachedData(cacheKey);
     if (cachedData) {
       return res.json(cachedData);

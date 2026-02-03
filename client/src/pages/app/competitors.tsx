@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Users, Plus, Loader2, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
+import { useActiveWorkspaceName, useIsDemoWorkspace } from '@/hooks/use-active-workspace';
 
 // UI Components
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,7 +57,6 @@ import {
   useDeleteCompetitor,
 } from '@/hooks/use-competitors';
 import { useToast } from '@/hooks/use-toast';
-import { isDemoPreview } from '@/lib/demo-preview';
 
 // Types
 import type { TimeRangePreset, CompetitorDetail } from '@shared/types';
@@ -78,6 +77,7 @@ interface OverviewTabProps {
 
 function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPeriod, isAddModalOpen, onOpenAddModal, onCloseAddModal }: OverviewTabProps) {
   const organizationName = useActiveWorkspaceName();
+  const readOnlyDemo = useIsDemoWorkspace();
   const timeRangePreset = range.preset as TimeRangePreset;
   const { toast } = useToast();
   // Selected competitor for head-to-head
@@ -270,8 +270,8 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
         <ContentCard
           title="Competitor rankings"
           subtitle="See where you rank in AI responses"
-          actionLabel={isDemoPreview() ? undefined : "+ Add competitor"}
-          onAction={isDemoPreview() ? undefined : onOpenAddModal}
+          actionLabel={readOnlyDemo ? undefined : "+ Add competitor"}
+          onAction={readOnlyDemo ? undefined : onOpenAddModal}
           hideActionIcon
           contentClassName="pt-0"
         >
@@ -378,7 +378,7 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
             <CompetitorLeaderboardExtended
               competitors={competitors}
               onRowClick={(c) => !c.isYou && handleCompetitorSelect(c.id)}
-              onDelete={isDemoPreview() ? undefined : (c) => handleDeleteCompetitor({ id: c.id, name: c.name })}
+              onDelete={readOnlyDemo ? undefined : (c) => handleDeleteCompetitor({ id: c.id, name: c.name })}
             />
           )}
         </ContentCard>
@@ -432,6 +432,7 @@ export function CompetitorsPage() {
   const { range, setRange } = useTimeRange('30d');
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const mockEmptyPeriod = import.meta.env.DEV && new URLSearchParams(search).get('mock') === 'empty-range';
+  const readOnlyDemo = useIsDemoWorkspace();
 
   // Get initial tab and brand from URL
   const urlParams = new URLSearchParams(search);
@@ -487,7 +488,7 @@ export function CompetitorsPage() {
         action={
           !isIntelligence ? (
             <div className="flex items-center gap-3">
-              {!isDemoPreview() && (
+              {!readOnlyDemo && (
                 <Button
                   variant="outline"
                   size="sm"

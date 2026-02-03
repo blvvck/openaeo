@@ -19,6 +19,7 @@ import { getSimpleSentiment, type SentimentResult } from '../services/analytics/
 import { analyzeCitations } from '../services/analytics/citation-tracker';
 import { getTopInsights } from '../services/analytics/insights-generator';
 import { getAlertRulesEngine } from '../services/alerts';
+import { getBotStats, type TrafficSummary } from '../services/bots/traffic-logger';
 import type { PromptResponseContext } from '@shared/schema';
 import type {
   DashboardRequest,
@@ -79,17 +80,6 @@ const PLATFORM_NAMES: Record<string, string> = {
   deepseek: 'DeepSeek',
   ai_mode: 'AI Mode',
   ai_overview: 'AI Overview',
-};
-
-const BOT_NAME_MAP: Record<string, string> = {
-  chatgpt: 'GPTBot',
-  claude: 'ClaudeBot',
-  gemini: 'Googlebot',
-  perplexity: 'PerplexityBot',
-  grok: 'GrokBot',
-  deepseek: 'DeepSeekBot',
-  ai_mode: 'GoogleBot-AI',
-  ai_overview: 'GoogleBot-AO',
 };
 
 /**
@@ -620,6 +610,26 @@ function buildCardSubtitles(brandName: string): DashboardResponse['cardSubtitles
   };
 }
 
+function buildBotVisitsData(current: TrafficSummary, previous: TrafficSummary): BotVisitsData {
+  const trend = previous.aiVisits > 0
+    ? Math.round(((current.aiVisits - previous.aiVisits) / previous.aiVisits) * 1000) / 10
+    : 0;
+
+  return {
+    total: current.aiVisits,
+    trend,
+    bots: current.byBot
+      .filter(bot => bot.category === 'ai')
+      .slice(0, 5)
+      .map(bot => ({
+        id: bot.botType,
+        name: bot.botType,
+        percentage: current.aiVisits > 0 ? Math.round((bot.visitCount / current.aiVisits) * 100) : 0,
+        count: bot.visitCount,
+      })),
+  };
+}
+
 /**
  * Core dashboard computation (extracted for background refresh)
  */
@@ -639,6 +649,8 @@ async function computeDashboardData(
   const [
     currentResponsesRaw,
     previousResponsesRaw,
+    currentBotStats,
+    previousBotStats,
     competitors,
     activeBrandConfig,
     alertHistory,
@@ -647,17 +659,23 @@ async function computeDashboardData(
     // Time-filtered queries at DB level
     storage.getResponsesInTimeRange(start, end),
     storage.getResponsesInTimeRange(previousStart, start),
+    getBotStats(start, end),
+    getBotStats(previousStart, start),
     storage.getCompetitors(),
     getActiveBrandConfig(),
     alertRulesEngine.getAlertHistory(100),
     workspaceId ? prismaRoot.responses.count({ where: { workspace_id: workspaceId } }) : Promise.resolve(0),
   ]);
 
+  const botVisitsData = buildBotVisitsData(currentBotStats, previousBotStats);
+
   // Check for empty state early
   const hasResponses = currentResponsesRaw.length > 0 || previousResponsesRaw.length > 0;
   if (!hasResponses) {
     const onboarding = await getOnboardingSteps(false);
-    return createEmptyResponse(onboarding, historicalResponseCount > 0);
+    const emptyResponse = createEmptyResponse(onboarding, historicalResponseCount > 0);
+    emptyResponse.botVisits = botVisitsData;
+    return emptyResponse;
   }
 
   // =========================================================================
@@ -916,35 +934,13 @@ async function computeDashboardData(
   });
 
   // =========================================================================
-  // PHASE 11: Platform summary and bot visits
+  // PHASE 11: Platform summary
   // =========================================================================
   const platformSummary: PlatformSummary = {
     strong: platformScores.filter(p => p.score >= 70).length,
     average: platformScores.filter(p => p.score >= 40 && p.score < 70).length,
     weak: platformScores.filter(p => p.score < 40).length,
   };
-
-  const platformCounts = new Map<string, number>();
-  for (const r of currentResponses) {
-    const p = r.platform || 'unknown';
-    platformCounts.set(p, (platformCounts.get(p) || 0) + 1);
-  }
-  const totalBotVisits = currentResponses.length;
-  const previousTotalBotVisits = previousResponses.length;
-  const botVisitsTrend =
-    previousTotalBotVisits > 0 ? Math.round(((totalBotVisits - previousTotalBotVisits) / previousTotalBotVisits) * 100 * 10) / 10 : 0;
-
-  const botsList = Array.from(platformCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([id, count]) => ({
-      id,
-      name: BOT_NAME_MAP[id] || id,
-      percentage: totalBotVisits > 0 ? Math.round((count / totalBotVisits) * 100) : 0,
-      count,
-    }));
-
-  const botVisitsData: BotVisitsData = { total: totalBotVisits, trend: botVisitsTrend, bots: botsList };
 
   // =========================================================================
   // PHASE 12: Insights count

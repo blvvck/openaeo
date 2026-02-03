@@ -44,6 +44,30 @@ export interface CitationsOverview {
   };
   uniqueSources: number;
   uniqueSourcesTrend: number;
+  tabMetrics: {
+    owned: {
+      topPage: string | null;
+      pagesCited: number;
+      pagesTrend: number;
+      avgPerPage: number | null;
+      avgPerPageTrend: number;
+    };
+    thirdParty: {
+      topSource: string | null;
+      topSourceCount: number;
+      uniqueSources: number;
+      uniqueSourcesTrend: number;
+      avgPerSource: number | null;
+      avgPerSourceTrend: number;
+    };
+    social: {
+      topPlatform: string | null;
+      platformCitations: number;
+      promptsCiting: number;
+      promptsTrend: number;
+      sentiment: CitationSentiment | null;
+    };
+  };
 }
 
 /** Tab-specific metrics */

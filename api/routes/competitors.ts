@@ -14,6 +14,7 @@ import { analyzeCitations } from '../services/analytics/citation-tracker';
 import type { TimeRangePreset, CompetitorMetricsResponse } from '@shared/types';
 import { currentWorkspaceId } from '../context/workspace-context';
 import { prismaRoot } from '../prisma';
+import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
 
 async function workspaceNameFallback(): Promise<string> {
   const workspaceId = currentWorkspaceId();
@@ -1105,7 +1106,7 @@ function getTimeWindow(timeRange: TimeRangePreset): { start: Date; end: Date } {
 router.get('/metrics', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = `metrics:${timeRange}`;
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'metrics', timeRange);
 
     // Check cache
     const cached = metricsCache.get(cacheKey);
@@ -1244,12 +1245,25 @@ router.get('/metrics', async (req: Request, res: Response) => {
       : 0;
 
     // Platform breakdown
-    const platformMentions = new Map<string, { total: number; brand: number }>();
+    const trackedCompetitorNames = competitorComparison.ranking
+      .filter(entity => !entity.isBrand)
+      .map(entity => entity.name);
+    const platformMentions = new Map<string, { total: number; brand: number; competitors: Map<string, number> }>();
     for (const r of currentResponses) {
       const platform = r.platform || 'unknown';
-      const existing = platformMentions.get(platform) || { total: 0, brand: 0 };
+      const existing = platformMentions.get(platform) || { total: 0, brand: 0, competitors: new Map<string, number>() };
       existing.total++;
       if (r.brandMentioned) existing.brand++;
+      const namedCompetitors = new Set(
+        (Array.isArray(r.competitorsMentioned) ? r.competitorsMentioned : []).map(name => name.toLowerCase()),
+      );
+      const responseText = r.text.toLowerCase();
+      for (const name of trackedCompetitorNames) {
+        if (namedCompetitors.has(name.toLowerCase()) || responseText.includes(name.toLowerCase())) {
+          const key = name.toLowerCase();
+          existing.competitors.set(key, (existing.competitors.get(key) ?? 0) + 1);
+        }
+      }
       platformMentions.set(platform, existing);
     }
 
@@ -1271,10 +1285,8 @@ router.get('/metrics', async (req: Request, res: Response) => {
         if (entity.isBrand) {
           shares[platform.id] = Math.round((platformData.brand / platformData.total) * 100);
         } else {
-          // For competitors, we'd need their mention data
-          // For now, derive from their overall score relative to brand
-          const ratio = entity.score / (brandRankEntity?.score || 1);
-          shares[platform.id] = Math.round((platformData.brand / platformData.total) * 100 * ratio);
+          const competitorMentions = platformData.competitors.get(entity.name.toLowerCase()) ?? 0;
+          shares[platform.id] = Math.round((competitorMentions / platformData.total) * 100);
         }
       }
       return {
@@ -1562,7 +1574,7 @@ import type {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = `competitors:${timeRange}`;
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'list', timeRange);
 
     // Check cache
     const cached = competitorsCache.get(cacheKey);
@@ -1821,7 +1833,7 @@ const PLATFORM_BREAKDOWN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 router.get('/by-platform', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = `platform-breakdown:${timeRange}`;
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'platform-breakdown', timeRange);
 
     // Check cache
     const cached = platformBreakdownCache.get(cacheKey);
@@ -1939,7 +1951,7 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
   try {
     const competitorId = req.params.id;
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = `compare:${competitorId}:${timeRange}`;
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'compare', competitorId, timeRange);
 
     // Check cache
     const cached = compareCache.get(cacheKey);

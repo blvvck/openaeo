@@ -671,17 +671,6 @@ function OverviewTab({
         onViewAll={() => onTabChange('topic')}
       />
 
-      {/* 1G. Data Freshness Footer */}
-      {data.meta?.lastUpdated && (
-        <div className="flex items-center justify-end gap-2 text-figma-xs text-figma-muted">
-          <span>
-            Last updated: {new Date(data.meta.lastUpdated).toLocaleString()}
-          </span>
-          {data.meta.dataFreshness === 'cached' && (
-            <span className="text-figma-orange">(cached)</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

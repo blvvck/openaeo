@@ -6,6 +6,8 @@ import { checkLlmsTxt, generateStarterLlmsTxt } from '../services/site-health/ll
 import { checkRobotsTxt, generateAIBotAllowSnippet } from '../services/site-health/robots-txt-parser';
 import { checkSitemap, daysSince } from '../services/site-health/sitemap-checker';
 import { checkSchema, generateOrganizationSchema } from '../services/site-health/schema-checker';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
 import type {
   HealthStatus,
   CheckStatus,
@@ -35,18 +37,18 @@ interface CacheEntry {
 const auditCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
-function getCachedAudit(domain: string): SiteHealthAudit | null {
-  const entry = auditCache.get(domain);
+function getCachedAudit(cacheKey: string): SiteHealthAudit | null {
+  const entry = auditCache.get(cacheKey);
   if (!entry) return null;
   if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    auditCache.delete(domain);
+    auditCache.delete(cacheKey);
     return null;
   }
   return entry.data;
 }
 
-function setCachedAudit(domain: string, audit: SiteHealthAudit): void {
-  auditCache.set(domain, { data: audit, timestamp: Date.now() });
+function setCachedAudit(cacheKey: string, audit: SiteHealthAudit): void {
+  auditCache.set(cacheKey, { data: audit, timestamp: Date.now() });
 }
 
 // =============================================================================
@@ -473,7 +475,8 @@ router.post('/audit', async (req: Request, res: Response) => {
     };
 
     // Cache the result
-    setCachedAudit(domain, audit);
+    const cacheKey = workspaceCacheKey('site-health', currentWorkspaceId() ?? 'unscoped', 'audit', domain);
+    setCachedAudit(cacheKey, audit);
 
     const response: SiteHealthAuditResponse = {
       ...audit,
@@ -521,8 +524,9 @@ router.get('/status', async (req: Request, res: Response) => {
       });
     }
 
-    const cachedAudit = getCachedAudit(domain);
-    const cacheEntry = auditCache.get(domain);
+    const cacheKey = workspaceCacheKey('site-health', currentWorkspaceId() ?? 'unscoped', 'audit', domain);
+    const cachedAudit = getCachedAudit(cacheKey);
+    const cacheEntry = auditCache.get(cacheKey);
 
     const response: SiteHealthStatusResponse = {
       hasAudit: cachedAudit !== null,

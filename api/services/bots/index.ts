@@ -8,6 +8,7 @@ export {
   logBotVisitsBatch,
   getBotStats,
   getAIBotStats,
+  getBotTimeline,
   getRecentBotVisits,
   getVisitsForUrl,
   cleanupOldVisits,
@@ -15,5 +16,6 @@ export {
   type BotClassification,
   type BotStats,
   type TrafficSummary,
+  type BotTimelineDay,
   type BotVisitMetadata,
 } from './traffic-logger';

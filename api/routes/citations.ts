@@ -5,6 +5,8 @@ import { storage } from '../data';
 import { getActiveBrandConfig } from '../services/brand-config';
 import { getSimpleSentiment } from '../services/analytics/sentiment-analyzer';
 import { analyzeCitations } from '../services/analytics/citation-tracker';
+import { currentWorkspaceId } from '../context/workspace-context';
+import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
 import type {
   CitationType,
   CitationSentiment,
@@ -164,7 +166,7 @@ interface ParsedCitation {
 router.get('/overview', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '30d';
-    const cacheKey = `citations:overview:${timeRange}`;
+    const cacheKey = workspaceCacheKey('citations', currentWorkspaceId() ?? 'unscoped', 'overview', timeRange);
 
     // Check cache
     const cached = getCached<CitationsOverviewResponse>(cacheKey);
@@ -210,7 +212,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     const uniqueDomains = new Set<string>();
     let topSource: { url: string; displayUrl: string; domain: string; type: CitationType; count: number } | null = null;
 
-    for (const c of currentCitations.topDomains) {
+    for (const c of currentCitations.domains) {
       const citationType = classifyCitation(c.domain, brandDomains);
       uniqueDomains.add(c.domain);
 
@@ -243,7 +245,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     let prevSocialCount = 0;
     const prevUniqueDomains = new Set<string>();
 
-    for (const c of previousCitations.topDomains) {
+    for (const c of previousCitations.domains) {
       const citationType = classifyCitation(c.domain, brandDomains);
       prevUniqueDomains.add(c.domain);
 
@@ -272,6 +274,68 @@ router.get('/overview', async (req: Request, res: Response) => {
     const calcPercentage = (count: number, total: number): number => {
       return total > 0 ? Math.round((count / total) * 100) : 0;
     };
+
+    const countPages = (citations: typeof currentCitations.citations) => {
+      const counts = new Map<string, number>();
+      for (const citation of citations) {
+        if (classifyCitation(citation.domain, brandDomains) !== 'owned') continue;
+        try {
+          const url = citation.url.startsWith('http') ? citation.url : `https://${citation.url}`;
+          const path = new URL(url).pathname || '/';
+          counts.set(path, (counts.get(path) ?? 0) + 1);
+        } catch {
+          continue;
+        }
+      }
+      return counts;
+    };
+
+    const ownedPageCounts = countPages(currentCitations.citations);
+    const prevOwnedPageCounts = countPages(previousCitations.citations);
+    const ownedTopPage = Array.from(ownedPageCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+    const thirdPartyDomains = currentCitations.domains.filter(domain =>
+      classifyCitation(domain.domain, brandDomains) === 'third-party'
+    );
+    const prevThirdPartyDomains = previousCitations.domains.filter(domain =>
+      classifyCitation(domain.domain, brandDomains) === 'third-party'
+    );
+    const thirdPartySource = [...thirdPartyDomains].sort((a, b) => b.citationCount - a.citationCount)[0];
+
+    const getSocialStats = (responses: typeof currentResponses) => {
+      const promptIds = new Set<number>();
+      const platformCounts = new Map<string, number>();
+      const sentiments: CitationSentiment[] = [];
+
+      for (const response of responses) {
+        const citations = analyzeCitations(
+          [{ text: response.text, platform: response.platform || 'unknown' }],
+          brandName,
+          100
+        ).citations.filter(citation => classifyCitation(citation.domain, brandDomains) === 'social');
+        if (citations.length === 0) continue;
+
+        promptIds.add(response.promptId);
+        sentiments.push(getSimpleSentiment(response.text).label);
+        for (const citation of citations) {
+          platformCounts.set(citation.platform, (platformCounts.get(citation.platform) ?? 0) + 1);
+        }
+      }
+
+      const topPlatform = Array.from(platformCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+      return {
+        topPlatform: topPlatform ? PLATFORM_NAMES[topPlatform[0]] || topPlatform[0] : null,
+        platformCitations: topPlatform?.[1] ?? 0,
+        promptsCiting: promptIds.size,
+        sentiment: sentiments.length > 0 ? getDominantSentiment(sentiments) : null,
+      };
+    };
+
+    const socialStats = getSocialStats(currentResponses);
+    const prevSocialStats = getSocialStats(previousResponses);
+    const ownedAverage = ownedPageCounts.size > 0 ? ownedCount / ownedPageCounts.size : null;
+    const prevOwnedAverage = prevOwnedPageCounts.size > 0 ? prevOwnedCount / prevOwnedPageCounts.size : null;
+    const thirdPartyAverage = thirdPartyDomains.length > 0 ? thirdPartyCount / thirdPartyDomains.length : null;
+    const prevThirdPartyAverage = prevThirdPartyDomains.length > 0 ? prevThirdPartyCount / prevThirdPartyDomains.length : null;
 
     const overview: CitationsOverview = {
       total: {
@@ -304,6 +368,27 @@ router.get('/overview', async (req: Request, res: Response) => {
       },
       uniqueSources: uniqueDomains.size,
       uniqueSourcesTrend: calcTrend(uniqueDomains.size, prevUniqueDomains.size),
+      tabMetrics: {
+        owned: {
+          topPage: ownedTopPage?.[0] ?? null,
+          pagesCited: ownedPageCounts.size,
+          pagesTrend: calcTrend(ownedPageCounts.size, prevOwnedPageCounts.size),
+          avgPerPage: ownedAverage === null ? null : Math.round(ownedAverage * 10) / 10,
+          avgPerPageTrend: calcTrend(ownedAverage ?? 0, prevOwnedAverage ?? 0),
+        },
+        thirdParty: {
+          topSource: thirdPartySource?.domain ?? null,
+          topSourceCount: thirdPartySource?.citationCount ?? 0,
+          uniqueSources: thirdPartyDomains.length,
+          uniqueSourcesTrend: calcTrend(thirdPartyDomains.length, prevThirdPartyDomains.length),
+          avgPerSource: thirdPartyAverage === null ? null : Math.round(thirdPartyAverage * 10) / 10,
+          avgPerSourceTrend: calcTrend(thirdPartyAverage ?? 0, prevThirdPartyAverage ?? 0),
+        },
+        social: {
+          ...socialStats,
+          promptsTrend: calcTrend(socialStats.promptsCiting, prevSocialStats.promptsCiting),
+        },
+      },
     };
 
     const response: CitationsOverviewResponse = {

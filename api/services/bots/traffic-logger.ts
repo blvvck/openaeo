@@ -70,6 +70,11 @@ export interface TrafficSummary {
   };
 }
 
+export interface BotTimelineDay {
+  date: string;
+  visits: Record<string, number>;
+}
+
 /**
  * Classify a bot by its user agent string
  */
@@ -277,6 +282,31 @@ export async function getAIBotStats(
     const classification = BOT_PATTERNS.find(function(p) { return p.name === bot.botType; });
     return classification && classification.category === 'ai';
   });
+}
+
+export async function getBotTimeline(from: Date, to: Date): Promise<BotTimelineDay[]> {
+  const rows = await prisma.bot_visits.findMany({
+    where: { workspace_id: requireWorkspaceId(), visited_at: { gte: from, lte: to } },
+    select: { bot_type: true, visited_at: true },
+    orderBy: { visited_at: "asc" },
+  });
+  const daily = new Map<string, Record<string, number>>();
+  const start = new Date(from);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(to);
+  end.setUTCHours(0, 0, 0, 0);
+
+  for (const date = new Date(start); date <= end; date.setUTCDate(date.getUTCDate() + 1)) {
+    daily.set(date.toISOString().slice(0, 10), {});
+  }
+
+  for (const row of rows) {
+    const date = row.visited_at.toISOString().slice(0, 10);
+    const visits = daily.get(date);
+    if (visits) visits[row.bot_type] = (visits[row.bot_type] ?? 0) + 1;
+  }
+
+  return Array.from(daily, ([date, visits]) => ({ date, visits }));
 }
 
 /**

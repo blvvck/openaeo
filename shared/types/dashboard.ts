@@ -211,11 +211,11 @@ export interface CategorizedCitationSources {
 }
 
 /**
- * Bot visits data — derived from response counts per platform
+ * Bot crawler visits aggregated from bot visit logs
  * Card: "Bot Visits"
  */
 export interface BotVisitsData {
-  /** Total bot visit count (response count in current period) */
+  /** Total AI crawler visits in the current period */
   total: number;
   /** % change vs previous period */
   trend: number;

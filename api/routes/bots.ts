@@ -11,6 +11,7 @@ import {
   logBotVisitsBatch,
   getBotStats,
   getAIBotStats,
+  getBotTimeline,
   getRecentBotVisits,
   getVisitsForUrl,
   cleanupOldVisits,
@@ -149,6 +150,19 @@ router.get('/bot-traffic/stats', async (req: Request, res: Response) => {
     }
 
     const stats = await getBotStats(from, to);
+    const periodEnd = to ?? new Date();
+    const periodStart = from ?? new Date(periodEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const periodLength = periodEnd.getTime() - periodStart.getTime();
+    const previous = await getBotStats(
+      new Date(periodStart.getTime() - periodLength),
+      periodStart,
+    );
+    const percentChange = (current: number, prior: number) => prior === 0
+      ? 0
+      : Math.round(((current - prior) / prior) * 1000) / 10;
+    const botByType = (items: typeof stats.byBot) => new Map(items.map(bot => [bot.botType, bot]));
+    const currentBots = botByType(stats.byBot);
+    const previousBots = botByType(previous.byBot);
 
     // Determine CDN configuration status from environment variables.
     // Mirrors the logic in /api/webhooks/cdn/health — no secrets are exposed.
@@ -163,10 +177,39 @@ router.get('/bot-traffic/stats', async (req: Request, res: Response) => {
       ...stats,
       cdnConfigured,
       configuredProviders,
+      trends: {
+        totalVisits: percentChange(stats.totalVisits, previous.totalVisits),
+        aiVisits: percentChange(stats.aiVisits, previous.aiVisits),
+        searchVisits: percentChange(stats.searchVisits, previous.searchVisits),
+        socialVisits: percentChange(stats.socialVisits, previous.socialVisits),
+        otherVisits: percentChange(stats.otherVisits, previous.otherVisits),
+        uniqueAiPages: percentChange(
+          stats.byBot.filter(bot => bot.category === 'ai').reduce((total, bot) => total + bot.uniqueUrls, 0),
+          previous.byBot.filter(bot => bot.category === 'ai').reduce((total, bot) => total + bot.uniqueUrls, 0),
+        ),
+        byBot: Object.fromEntries(Array.from(currentBots, ([botType, bot]) => [
+          botType,
+          percentChange(bot.visitCount, previousBots.get(botType)?.visitCount ?? 0),
+        ])),
+      },
     });
   } catch (error: any) {
     console.error('[Bot Traffic API] Stats error:', error);
     res.status(500).json({ error: 'Failed to fetch bot traffic stats' });
+  }
+});
+
+router.get('/bot-traffic/timeline', async (req: Request, res: Response) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from as string) : null;
+    const to = req.query.to ? new Date(req.query.to as string) : null;
+    if (!from || !to || isNaN(from.getTime()) || isNaN(to.getTime()) || from > to) {
+      return res.status(400).json({ error: 'Valid from and to dates are required' });
+    }
+    res.json({ points: await getBotTimeline(from, to) });
+  } catch (error: any) {
+    console.error('[Bot Traffic API] Timeline error:', error);
+    res.status(500).json({ error: 'Failed to fetch bot traffic timeline' });
   }
 });
 

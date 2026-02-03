@@ -214,15 +214,13 @@ router.get('/overview', async (req: Request, res: Response) => {
       });
       const stagePromptIds = new Set(stagePrompts.map(p => p.id));
 
-      // Count mentions in current period
-      const currentMentions = currentResponses.filter(
-        r => stagePromptIds.has(r.promptId) && r.brandMentioned
-      ).length;
+      const currentMentions = new Set(currentResponses
+        .filter(r => stagePromptIds.has(r.promptId) && r.brandMentioned)
+        .map(r => r.promptId)).size;
 
-      // Count mentions in previous period
-      const previousMentions = previousResponses.filter(
-        r => stagePromptIds.has(r.promptId) && r.brandMentioned
-      ).length;
+      const previousMentions = new Set(previousResponses
+        .filter(r => stagePromptIds.has(r.promptId) && r.brandMentioned)
+        .map(r => r.promptId)).size;
 
       // Calculate coverage
       const promptCount = stagePrompts.length;

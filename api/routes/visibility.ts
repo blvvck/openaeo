@@ -49,6 +49,39 @@ const PLATFORM_NAMES: Record<string, string> = {
 
 const router = Router();
 
+function firstTextIndex(text: string, terms: string[]): number {
+  const lowerText = text.toLowerCase();
+  return terms.reduce((earliest, term) => {
+    const index = lowerText.indexOf(term.toLowerCase());
+    return index >= 0 && index < earliest ? index : earliest;
+  }, Number.POSITIVE_INFINITY);
+}
+
+function getObservedPosition(
+  responses: Array<{ promptId: number; text: string; brandMentioned: boolean | null }>,
+  promptIds: Set<number>,
+  brandTerms: string[],
+  competitorTerms: string[],
+): { position: number | null; samples: number } {
+  const positions = responses.flatMap((response) => {
+    if (!promptIds.has(response.promptId) || !response.brandMentioned) return [];
+    const brandIndex = firstTextIndex(response.text, brandTerms);
+    if (!Number.isFinite(brandIndex)) return [];
+    const competitorIndexes = competitorTerms
+      .map((term) => firstTextIndex(response.text, [term]))
+      .filter((index) => Number.isFinite(index));
+    if (competitorIndexes.length === 0) return [];
+    return [1 + competitorIndexes.filter((index) => index < brandIndex).length];
+  }).sort((a, b) => a - b);
+
+  if (positions.length < 2) return { position: null, samples: positions.length };
+  const middle = Math.floor(positions.length / 2);
+  const position = positions.length % 2 === 0
+    ? Math.round((positions[middle - 1] + positions[middle]) / 2)
+    : positions[middle];
+  return { position, samples: positions.length };
+}
+
 // Cache for visibility overview (5 minute TTL)
 interface CacheEntry {
   data: VisibilityOverviewResponse;
@@ -602,15 +635,23 @@ router.get('/topics', async (req: Request, res: Response) => {
     const fromDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
     const previousFromDate = new Date(fromDate.getTime() - days * 24 * 60 * 60 * 1000);
 
-    // Get all topics
-    const topics = await storage.getTopics();
-
-    // Get responses for current and previous periods
-    const currentResponses = await storage.getResponsesInTimeRange(fromDate, now);
-    const previousResponses = await storage.getResponsesInTimeRange(previousFromDate, fromDate);
-
-    // Get prompts to map topics
-    const prompts = await storage.getLatestPrompts();
+    const [topics, currentResponses, previousResponses, prompts, competitors, brandConfig] = await Promise.all([
+      storage.getTopics(),
+      storage.getResponsesInTimeRange(fromDate, now),
+      storage.getResponsesInTimeRange(previousFromDate, fromDate),
+      storage.getLatestPrompts(),
+      storage.getCompetitors(),
+      getActiveBrandConfig(),
+    ]);
+    const configuredCompetitors = Array.isArray(brandConfig?.competitorList)
+      ? brandConfig.competitorList.filter((name): name is string => typeof name === 'string')
+      : [];
+    const competitorTerms = Array.from(new Set([...competitors.map(({ name }) => name), ...configuredCompetitors]));
+    const brandAliases = Array.isArray(brandConfig?.aliases)
+      ? brandConfig.aliases.filter((name): name is string => typeof name === 'string')
+      : [];
+    const brandTerms = Array.from(new Set([brandConfig?.name, ...brandAliases].filter((name): name is string => Boolean(name))));
+    const topicCoverage = new Map<number, { current: number; previous: number; previousMentions: number }>();
 
     interface TopicMetricItem {
       id: number;
@@ -625,18 +666,18 @@ router.get('/topics', async (req: Request, res: Response) => {
     // Build topic metrics
     const topicMetrics: TopicMetricItem[] = topics.map(topic => {
       // Find prompts for this topic
-      const topicPromptIds = prompts
+      const topicPromptIdList = prompts
         .filter(p => p.topicId === topic.id || (p as any).topicIds?.includes(topic.id))
         .map(p => p.id);
 
       // Count mentions in current period
       const currentMentions = currentResponses.filter(
-        r => topicPromptIds.includes(r.promptId) && r.brandMentioned
+        r => topicPromptIdList.includes(r.promptId) && r.brandMentioned
       ).length;
 
       // Count mentions in previous period
       const previousMentions = previousResponses.filter(
-        r => topicPromptIds.includes(r.promptId) && r.brandMentioned
+        r => topicPromptIdList.includes(r.promptId) && r.brandMentioned
       ).length;
 
       // Calculate trend
@@ -644,9 +685,12 @@ router.get('/topics', async (req: Request, res: Response) => {
         ? Math.round(((currentMentions - previousMentions) / previousMentions) * 100)
         : currentMentions > 0 ? 100 : 0;
 
-      // Calculate position (based on mention rank)
-      const position = currentMentions > 0 ? Math.max(1, Math.ceil(5 - (currentMentions / 3))) : null;
-      const previousPosition = previousMentions > 0 ? Math.max(1, Math.ceil(5 - (previousMentions / 3))) : undefined;
+      const topicPromptIds = new Set(topicPromptIdList);
+      const currentPosition = getObservedPosition(currentResponses, topicPromptIds, brandTerms, competitorTerms);
+      const previousPosition = getObservedPosition(previousResponses, topicPromptIds, brandTerms, competitorTerms);
+      const currentResponseCount = currentResponses.filter((r) => topicPromptIds.has(r.promptId)).length;
+      const previousResponseCount = previousResponses.filter((r) => topicPromptIds.has(r.promptId)).length;
+      topicCoverage.set(topic.id, { current: currentResponseCount, previous: previousResponseCount, previousMentions });
 
       // Generate trend label
       let trendLabel = 'Stable';
@@ -657,59 +701,71 @@ router.get('/topics', async (req: Request, res: Response) => {
         id: topic.id,
         name: topic.name,
         mentions: currentMentions,
-        position,
+        position: currentPosition.position,
         trend,
-        previousPosition,
+        previousPosition: previousPosition.position ?? undefined,
         trendLabel,
       };
     });
 
-    // Sort by mentions for ranking
-    const sortedByMentions = [...topicMetrics].sort((a, b) => b.mentions - a.mentions);
+    const sortedByPosition = [...topicMetrics].sort((a, b) => {
+      if (a.position === null) return 1;
+      if (b.position === null) return -1;
+      return a.position - b.position || b.mentions - a.mentions;
+    });
 
-    // Top Topics: Highest mentions, position 1-3
-    const topTopics = sortedByMentions
-      .filter(t => t.mentions > 0 && t.position && t.position <= 3)
-      .slice(0, 5)
+    // Top Topics: Observed position 1-3
+    const topTopics = sortedByPosition
+      .filter(t => t.position !== null && t.position <= 3)
+      .slice(0, 7)
       .map(t => ({
         ...t,
         subtitle: `#${t.position} rank • ${t.mentions} mentions`,
       }));
 
-    // Newly-won Topics: Positive trend > 20%, moved up in position
-    const newlyWonTopics = sortedByMentions
-      .filter(t => t.trend > 20 && t.mentions > 0)
-      .sort((a, b) => b.trend - a.trend)
-      .slice(0, 5)
+    // Newly-won Topics: Entered the top three positions with prior response coverage
+    const newlyWonTopics = sortedByPosition
+      .filter(t => {
+        const coverage = topicCoverage.get(t.id);
+        if (t.position === null || t.position > 3 || !coverage || coverage.previous < 2) return false;
+        if (t.previousPosition !== undefined) return t.previousPosition > 3;
+        return coverage.previousMentions === 0;
+      })
+      .sort((a, b) => (a.position ?? 99) - (b.position ?? 99) || b.trend - a.trend)
+      .slice(0, 7)
       .map(t => ({
         ...t,
         subtitle: `${t.trend > 0 ? '+' : ''}${t.trend}% growth`,
       }));
 
-    // Underperforming Topics: Has prompts but low mentions, position > 3
+    // Underperforming Topics: Adequate response coverage but outside the top three or unranked
     const underperformingTopics = topicMetrics
       .filter(t => {
-        const hasPrompts = prompts.some(p => p.topicId === t.id);
-        return hasPrompts && (t.position === null || t.position > 3);
+        const hasPrompts = prompts.some(p => p.topicId === t.id || (p as any).topicIds?.includes(t.id));
+        const coverage = topicCoverage.get(t.id);
+        if (!hasPrompts || !coverage || coverage.current < 2) return false;
+        return t.position !== null ? t.position > 3 : t.mentions === 0;
       })
       .sort((a, b) => (a.position ?? 99) - (b.position ?? 99))
-      .slice(0, 5)
+      .slice(0, 7)
       .map(t => ({
         ...t,
         subtitle: t.position ? `#${t.position} rank • Needs attention` : 'No mentions yet',
       }));
 
-    // Lost Topics: Was in top 3, now not (or significant position drop)
+    // Lost Topics: Fell from the top three to a lower or unranked position
     const lostTopics = topicMetrics
       .filter(t => {
-        if (!t.previousPosition || !t.position) return false;
-        return t.previousPosition <= 3 && t.position > 3;
+        const coverage = topicCoverage.get(t.id);
+        if (!t.previousPosition || t.previousPosition > 3) return false;
+        if (t.position !== null) return t.position > 3;
+        return t.mentions === 0 && Boolean(coverage && coverage.current >= 2);
       })
       .sort((a, b) => (b.previousPosition ?? 0) - (a.previousPosition ?? 0))
-      .slice(0, 5)
+      .slice(0, 7)
       .map(t => ({
         ...t,
-        subtitle: `Dropped from #${t.previousPosition} to #${t.position}`,
+        subtitle: `Dropped from #${t.previousPosition} to ${t.position ? `#${t.position}` : 'unranked'}`,
       }));
 
     res.json({

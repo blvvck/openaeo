@@ -13,12 +13,12 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
  * - GET /api/bot-traffic/ai-bots — AI bot-specific stats
  * - GET /api/bot-traffic/recent — recent visits
  *
- * Note: Shows seeded demo data until CDN webhook is configured.
+ * Bot metrics and history are loaded from the active workspace API.
  */
 
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useLocation, useSearch } from 'wouter';
+import { useSearch } from 'wouter';
 import {
   Info,
   Bot,
@@ -33,8 +33,6 @@ import {
   X,
   ExternalLink,
   Search,
-  ChevronLeft,
-  ChevronRight,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -83,6 +81,7 @@ import {
   CardDivider,
   PlatformRow,
   TableHeader,
+  TablePagination,
   Skeleton,
   ChartSkeleton,
   InsightBox,
@@ -92,8 +91,8 @@ import {
 import { BotTrafficChart } from '@/components/bots/bot-traffic-chart';
 
 // Platform Icon & Bot Constants
-import { PlatformIcon, getPlatformInfo, getPlatformColor, AI_BOTS, SEARCH_BOTS, SOCIAL_BOTS } from '@/components/ui/platform-icon';
-import { isDemoPreview } from '@/lib/demo-preview';
+import { PlatformIcon, getPlatformInfo, getPlatformColor, getBotIconId, AI_BOTS, SEARCH_BOTS, SOCIAL_BOTS } from '@/components/ui/platform-icon';
+import { useIsDemoWorkspace } from '@/hooks/use-active-workspace';
 
 // Types
 import type { TimeRangePreset } from '@shared/types';
@@ -123,13 +122,20 @@ interface TrafficSummary {
     hasHistoricalData: boolean;
     hasDataInRange: boolean;
   };
-  isDemo?: boolean;
+  trends: {
+    totalVisits: number;
+    aiVisits: number;
+    searchVisits: number;
+    socialVisits: number;
+    otherVisits: number;
+    uniqueAiPages: number;
+    byBot: Record<string, number>;
+  };
 }
 
 interface AIBotStats {
   aiBots: BotStats[];
   totalAIVisits: number;
-  isDemo?: boolean;
 }
 
 interface BotVisit {
@@ -148,7 +154,6 @@ interface BotVisit {
 interface RecentVisitsResponse {
   visits: BotVisit[];
   count: number;
-  isDemo?: boolean;
 }
 
 interface TopCrawledPage {
@@ -161,33 +166,27 @@ interface TopCrawledPage {
 // ============================================================================
 
 function botToIcon(botName: string): string | null {
-  // Check AI bots
-  const aiBot = AI_BOTS.find(b => b.id === botName);
-  if (aiBot) return aiBot.icon;
-
-  // Check Search bots
-  const searchBot = SEARCH_BOTS.find(b => b.id === botName);
-  if (searchBot) return searchBot.icon;
-
-  // Check Social bots
-  const socialBot = SOCIAL_BOTS.find(b => b.id === botName);
-  if (socialBot) return socialBot.icon;
-
-  return null;
+  return getBotIconId(botName);
 }
 
 // Get display name for a bot (e.g., 'facebookexternalhit' -> 'Facebook')
 function botToDisplayName(botId: string): string {
-  const aiBot = AI_BOTS.find(b => b.id === botId);
+  const normalizedId = botId.toLowerCase();
+  const aiBot = AI_BOTS.find(b => b.id.toLowerCase() === normalizedId || b.name.toLowerCase() === normalizedId);
   if (aiBot) return aiBot.name;
 
-  const searchBot = SEARCH_BOTS.find(b => b.id === botId);
+  const searchBot = SEARCH_BOTS.find(b => b.id.toLowerCase() === normalizedId || b.name.toLowerCase() === normalizedId);
   if (searchBot) return searchBot.name;
 
-  const socialBot = SOCIAL_BOTS.find(b => b.id === botId);
+  const socialBot = SOCIAL_BOTS.find(b => b.id.toLowerCase() === normalizedId || b.name.toLowerCase() === normalizedId);
   if (socialBot) return socialBot.name;
 
   return botId; // Fallback to raw ID
+}
+
+function findBotStats<T extends { botType: string }>(bots: T[], botType: string): T | undefined {
+  const normalizedType = botType.toLowerCase();
+  return bots.find(bot => bot.botType.toLowerCase() === normalizedType);
 }
 
 // Helper to render bot icon - uses PlatformIcon if available, Globe fallback
@@ -228,7 +227,6 @@ function useBotStats(range: TimeRange) {
   return useQuery<BotStatsResponse>({
     queryKey: ['bot-traffic', 'stats', from.toISOString(), to.toISOString()],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoBotStats(range);
       const params = new URLSearchParams({
         from: from.toISOString(),
         to: to.toISOString(),
@@ -252,7 +250,6 @@ function useAIBotStats(range: TimeRange) {
   return useQuery<AIBotStats>({
     queryKey: ['bot-traffic', 'ai-bots', from.toISOString(), to.toISOString()],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoAIStats();
       const params = new URLSearchParams({
         from: from.toISOString(),
         to: to.toISOString(),
@@ -276,7 +273,6 @@ function useRecentBotVisits(range: TimeRange, limit: number = 10, botType?: stri
   return useQuery<RecentVisitsResponse>({
     queryKey: ['bot-traffic', 'recent', from.toISOString(), to.toISOString(), limit, botType],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoRecentVisits(limit, botType);
       const params = new URLSearchParams({
         limit: String(limit),
         from: from.toISOString(),
@@ -293,6 +289,23 @@ function useRecentBotVisits(range: TimeRange, limit: number = 10, botType?: stri
       return res.json();
     },
     staleTime: 60 * 1000, // 1 minute - recent data updates more frequently
+    placeholderData: keepPreviousData,
+    retry: 2,
+  });
+}
+
+function useBotTimeline(range: TimeRange) {
+  const { from, to } = getDateRange(range);
+
+  return useQuery<{ points: Array<{ date: string; visits: Record<string, number> }> }>({
+    queryKey: ['bot-traffic', 'timeline', from.toISOString(), to.toISOString()],
+    queryFn: async () => {
+      const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() });
+      const res = await fetch(`/api/bot-traffic/timeline?${params}`);
+      if (!res.ok) throw new Error('Failed to load bot traffic timeline');
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
     retry: 2,
   });
@@ -331,86 +344,11 @@ function formatRelativeTime(dateString: string): string {
 }
 
 function getBotCategory(botType: string): 'ai' | 'search' | 'social' | 'other' {
-  // Derive from constants - no hardcoded lists
-  if (AI_BOTS.some(b => botType.includes(b.id))) return 'ai';
-  if (SEARCH_BOTS.some(b => botType.includes(b.id))) return 'search';
-  if (SOCIAL_BOTS.some(b => botType.includes(b.id))) return 'social';
+  const normalizedType = botType.toLowerCase();
+  if (AI_BOTS.some(bot => normalizedType.includes(bot.id.toLowerCase()))) return 'ai';
+  if (SEARCH_BOTS.some(bot => normalizedType.includes(bot.id.toLowerCase()))) return 'search';
+  if (SOCIAL_BOTS.some(bot => normalizedType.includes(bot.id.toLowerCase()))) return 'social';
   return 'other';
-}
-
-// ============================================================================
-// Seeded Demo Data (visit counts for demo mode)
-// ============================================================================
-
-// Demo visit counts keyed by bot ID
-const DEMO_AI_VISITS: Record<string, { visits: number; pages: number }> = {
-  [AI_BOTS[0].id]: { visits: 1203, pages: 47 },
-  [AI_BOTS[1].id]: { visits: 523, pages: 31 },
-  [AI_BOTS[2].id]: { visits: 847, pages: 38 },
-  [AI_BOTS[3].id]: { visits: 412, pages: 29 },
-  [AI_BOTS[4].id]: { visits: 285, pages: 24 },
-  [AI_BOTS[5].id]: { visits: 156, pages: 21 },
-  [AI_BOTS[6].id]: { visits: 100, pages: 18 },
-};
-
-const DEMO_SEARCH_VISITS: Record<string, { visits: number; pages: number }> = {
-  [SEARCH_BOTS[0].id]: { visits: 4521, pages: 156 },
-  [SEARCH_BOTS[1].id]: { visits: 1834, pages: 89 },
-  [SEARCH_BOTS[2].id]: { visits: 423, pages: 34 },
-  [SEARCH_BOTS[3].id]: { visits: 287, pages: 28 },
-  [SEARCH_BOTS[4].id]: { visits: 156, pages: 19 },
-};
-
-const DEMO_SOCIAL_VISITS: Record<string, { visits: number; pages: number }> = {
-  [SOCIAL_BOTS[0].id]: { visits: 892, pages: 45 },
-  [SOCIAL_BOTS[1].id]: { visits: 634, pages: 38 },
-  [SOCIAL_BOTS[2].id]: { visits: 312, pages: 24 },
-  [SOCIAL_BOTS[3].id]: { visits: 178, pages: 16 },
-};
-
-const SEEDED_TOP_PAGES: TopCrawledPage[] = [
-  { path: '/blog/ai-guide', visits: 234 },
-  { path: '/docs/api', visits: 189 },
-  { path: '/pricing', visits: 156 },
-  { path: '/features', visits: 142 },
-  { path: '/blog/case-study', visits: 98 },
-];
-
-const SEEDED_RECENT_VISITS: BotVisit[] = [
-  { id: 1, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 2 * 60000).toISOString(), statusCode: 200, responseTimeMs: 142, contentType: 'text/html', contentLengthBytes: 45231 },
-  { id: 2, botType: AI_BOTS[2].id, userAgent: `${AI_BOTS[2].id}/1.0`, url: '/docs/getting-started', visitedAt: new Date(Date.now() - 5 * 60000).toISOString(), statusCode: 200, responseTimeMs: 89, contentType: 'text/html', contentLengthBytes: 32156 },
-  { id: 3, botType: SEARCH_BOTS[0].id, userAgent: `${SEARCH_BOTS[0].id}/2.1`, url: '/pricing', visitedAt: new Date(Date.now() - 12 * 60000).toISOString(), statusCode: 200, responseTimeMs: 67, contentType: 'text/html', contentLengthBytes: 28943 },
-  { id: 4, botType: AI_BOTS[3].id, userAgent: `${AI_BOTS[3].id}/1.0`, url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 15 * 60000).toISOString(), statusCode: 200, responseTimeMs: 156, contentType: 'text/html', contentLengthBytes: 52847 },
-  { id: 5, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/features', visitedAt: new Date(Date.now() - 23 * 60000).toISOString(), statusCode: 200, responseTimeMs: 78, contentType: 'text/html', contentLengthBytes: 31256 },
-  { id: 6, botType: AI_BOTS[2].id, userAgent: `${AI_BOTS[2].id}/1.0`, url: '/blog/case-study', visitedAt: new Date(Date.now() - 35 * 60000).toISOString(), statusCode: 200, responseTimeMs: 134, contentType: 'text/html', contentLengthBytes: 48923 },
-  { id: 7, botType: AI_BOTS[4].id, userAgent: AI_BOTS[4].id, url: '/docs/api', visitedAt: new Date(Date.now() - 42 * 60000).toISOString(), statusCode: 200, responseTimeMs: 112, contentType: 'text/html', contentLengthBytes: 67432 },
-  { id: 8, botType: AI_BOTS[0].id, userAgent: `${AI_BOTS[0].id}/1.0`, url: '/about', visitedAt: new Date(Date.now() - 58 * 60000).toISOString(), statusCode: 200, responseTimeMs: 45, contentType: 'text/html', contentLengthBytes: 18234 },
-  { id: 9, botType: AI_BOTS[3].id, userAgent: `${AI_BOTS[3].id}/1.0`, url: '/pricing', visitedAt: new Date(Date.now() - 65 * 60000).toISOString(), statusCode: 304, responseTimeMs: 23, contentType: null, contentLengthBytes: 0 },
-  { id: 10, botType: SEARCH_BOTS[1].id, userAgent: `${SEARCH_BOTS[1].id}/2.0`, url: '/blog/ai-trends', visitedAt: new Date(Date.now() - 78 * 60000).toISOString(), statusCode: 200, responseTimeMs: 167, contentType: 'text/html', contentLengthBytes: 45231 },
-  { id: 11, botType: SOCIAL_BOTS[0].id, userAgent: `${SOCIAL_BOTS[0].id}/1.0`, url: '/blog/ai-guide', visitedAt: new Date(Date.now() - 85 * 60000).toISOString(), statusCode: 200, responseTimeMs: 98, contentType: 'text/html', contentLengthBytes: 52847 },
-  { id: 12, botType: SOCIAL_BOTS[1].id, userAgent: `${SOCIAL_BOTS[1].id}/1.1`, url: '/features', visitedAt: new Date(Date.now() - 92 * 60000).toISOString(), statusCode: 200, responseTimeMs: 76, contentType: 'text/html', contentLengthBytes: 31256 },
-];
-
-function getDemoBotStats(range: TimeRange): BotStatsResponse {
-  const bots = [
-    ...AI_BOTS.map(bot => ({ botType: bot.id, category: 'ai', visitCount: DEMO_AI_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_AI_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
-    ...SEARCH_BOTS.map(bot => ({ botType: bot.id, category: 'search', visitCount: DEMO_SEARCH_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_SEARCH_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
-    ...SOCIAL_BOTS.map(bot => ({ botType: bot.id, category: 'social', visitCount: DEMO_SOCIAL_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_SOCIAL_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() })),
-  ];
-  const aiVisits = bots.filter(bot => bot.category === 'ai').reduce((total, bot) => total + bot.visitCount, 0);
-  const searchVisits = bots.filter(bot => bot.category === 'search').reduce((total, bot) => total + bot.visitCount, 0);
-  const socialVisits = bots.filter(bot => bot.category === 'social').reduce((total, bot) => total + bot.visitCount, 0);
-  return { totalVisits: aiVisits + searchVisits + socialVisits, aiVisits, searchVisits, socialVisits, otherVisits: 0, byBot: bots, period: { from: range.from.toISOString(), to: range.to.toISOString(), hasHistoricalData: false, hasDataInRange: true }, isDemo: true, cdnConfigured: false };
-}
-
-function getDemoAIStats(): AIBotStats {
-  const aiBots = AI_BOTS.map(bot => ({ botType: bot.id, category: 'ai', visitCount: DEMO_AI_VISITS[bot.id]?.visits ?? 0, uniqueUrls: DEMO_AI_VISITS[bot.id]?.pages ?? 0, lastVisit: new Date().toISOString() }));
-  return { aiBots, totalAIVisits: aiBots.reduce((total, bot) => total + bot.visitCount, 0), isDemo: true };
-}
-
-function getDemoRecentVisits(limit: number, botType?: string): RecentVisitsResponse {
-  const visits = SEEDED_RECENT_VISITS.filter(visit => !botType || botType === 'all' || visit.botType === botType).slice(0, limit);
-  return { visits, count: visits.length, isDemo: true };
 }
 
 // ============================================================================
@@ -428,72 +366,18 @@ import type {
   Recommendation as SHRecommendation,
 } from '@shared/types/site-health';
 
-const MOCK_SITE_HEALTH_AT = new Date().toISOString();
-const MOCK_COPY_FEEDBACK = {
-  llms: {
-    title: 'Starter llms.txt copied',
-    description: 'Paste it into /llms.txt at example.com’s domain root, customize the page links, publish it, then rerun the audit.',
-  },
-  robots: {
-    title: 'AI crawler rules copied',
-    description: 'Add these rules to example.com’s robots.txt, check for conflicting Disallow rules, publish the file, then rerun the audit.',
-  },
-  schema: {
-    title: 'Organization schema copied',
-    description: 'Replace the example name and URL, add the JSON-LD to the homepage head, publish the page, then rerun the audit.',
-  },
-};
-const MOCK_SITE_HEALTH_AUDIT: SiteHealthAudit = {
-  domain: 'example.com',
-  summary: {
-    llmsTxt: 'issue',
-    robotsTxt: 'warning',
-    sitemap: 'good',
-    schema: 'issue',
-    pageMeta: 'good',
-    lastAuditAt: MOCK_SITE_HEALTH_AT,
-  },
-  checks: [
-    { id: 'llms-txt-present', name: 'llms.txt present', category: 'llms', status: 'fail', details: 'File not found at /llms.txt', action: { label: 'Copy starter', type: 'copy', value: '# example.com\n\n> Official website for example.com.\n\n## Core pages\n- [Home](https://example.com): Main website\n', copyFeedback: MOCK_COPY_FEEDBACK.llms } },
-    { id: 'robots-txt-exists', name: 'robots.txt available', category: 'robots', status: 'pass', details: 'Found at /robots.txt' },
-    { id: 'robots-txt-ai-bots', name: 'AI crawlers allowed', category: 'robots', status: 'warn', details: '2 of 7 blocked', action: { label: 'Fix', type: 'copy', value: 'User-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n', copyFeedback: MOCK_COPY_FEEDBACK.robots } },
-    { id: 'sitemap-present', name: 'Sitemap available', category: 'sitemap', status: 'pass', details: 'Found at /sitemap.xml', action: { label: 'View', type: 'link', value: 'https://example.com/sitemap.xml' } },
-    { id: 'sitemap-lastmod', name: 'Last modified dates', category: 'sitemap', status: 'pass', details: 'Present on 42 URLs' },
-    { id: 'schema-organization', name: 'Organization schema', category: 'schema', status: 'fail', details: 'Not found on homepage', action: { label: 'Add', type: 'copy', value: '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Example Company",\n  "url": "https://example.com"\n}', copyFeedback: MOCK_COPY_FEEDBACK.schema } },
-    { id: 'schema-faq', name: 'FAQ schema', category: 'schema', status: 'warn', details: 'Not found on sampled pages' },
-    { id: 'meta-description', name: 'Meta description', category: 'other', status: 'pass', details: 'Present on the homepage' },
-    { id: 'open-graph-tags', name: 'Open Graph tags', category: 'other', status: 'pass', details: 'Title, description, and image are present' },
-  ],
-  recommendations: [
-    { id: 'add-organization-schema', priority: 1, title: 'Add Organization schema markup', description: 'AI systems use this to verify your brand identity.', impact: 'high', actions: [{ label: 'View guide', type: 'link', value: 'https://schema.org/Organization' }, { label: 'Copy snippet', type: 'copy', value: '{\n  "@context": "https://schema.org",\n  "@type": "Organization",\n  "name": "Example Company",\n  "url": "https://example.com"\n}', copyFeedback: MOCK_COPY_FEEDBACK.schema }] },
-    { id: 'unblock-ai-bots', priority: 2, title: 'Unblock AI crawlers in robots.txt', description: 'Allowing these crawlers helps AI platforms access your public pages.', impact: 'high', actions: [{ label: 'View robots.txt', type: 'link', value: 'https://example.com/robots.txt' }, { label: 'Copy fix', type: 'copy', value: 'User-agent: GPTBot\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n', copyFeedback: MOCK_COPY_FEEDBACK.robots }] },
-    { id: 'add-llms-txt', priority: 3, title: 'Add an llms.txt file', description: 'Help AI systems understand your site structure and priorities.', impact: 'medium', actions: [{ label: 'View guide', type: 'link', value: 'https://llmstxt.org' }, { label: 'Copy starter', type: 'copy', value: '# example.com\n\n> Official website for example.com.\n\n## Core pages\n- [Home](https://example.com): Main website\n', copyFeedback: MOCK_COPY_FEEDBACK.llms }] },
-    { id: 'add-faq-schema', priority: 4, title: 'Add FAQ schema to key pages', description: 'Structured answers can help AI systems identify and cite your support content.', impact: 'medium', actions: [] },
-  ],
-  auditedAt: MOCK_SITE_HEALTH_AT,
-};
-
 // ============================================================================
 // Site Health Hook
 // ============================================================================
 
 function useSiteHealth() {
-  const isMockPreview = isDemoPreview() || (import.meta.env.DEV
-    && new URLSearchParams(window.location.search).get('mockSiteHealth') === '1');
-  const [audit, setAudit] = useState<SiteHealthAudit | null>(
-    isMockPreview ? MOCK_SITE_HEALTH_AUDIT : null
-  );
+  const [audit, setAudit] = useState<SiteHealthAudit | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!isMockPreview);
+  const [initialLoading, setInitialLoading] = useState(true);
   const { toast } = useToast();
+  const readOnlyDemo = useIsDemoWorkspace();
 
   useEffect(() => {
-    if (isMockPreview) {
-      setAudit(MOCK_SITE_HEALTH_AUDIT);
-      setInitialLoading(false);
-      return;
-    }
-
     fetch('/api/site-health/status')
       .then(res => res.json())
       .then((data: SiteHealthStatusResponse) => {
@@ -505,14 +389,10 @@ function useSiteHealth() {
         // No cached audit, that's fine
       })
       .finally(() => setInitialLoading(false));
-  }, [isMockPreview]);
+  }, []);
 
   const runAudit = async () => {
-    if (isMockPreview) {
-      setAudit(MOCK_SITE_HEALTH_AUDIT);
-      return;
-    }
-
+    if (readOnlyDemo) return;
     setIsAuditing(true);
     try {
       const res = await fetch('/api/site-health/audit', {
@@ -539,7 +419,7 @@ function useSiteHealth() {
     }
   };
 
-  return { audit, isAuditing, initialLoading, runAudit };
+  return { audit, isAuditing, initialLoading, runAudit, readOnlyDemo };
 }
 
 // ============================================================================
@@ -592,37 +472,6 @@ function InfoTooltip({ content }: { content: string }) {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  );
-}
-
-// ============================================================================
-// Integration Banner
-// ============================================================================
-
-interface IntegrationBannerProps {
-  onNavigate: () => void;
-  onDismiss?: () => void;
-}
-
-function IntegrationBanner({ onNavigate }: IntegrationBannerProps) {
-  return (
-    <div className="bg-figma-blue-light border border-figma-blue/20 rounded-xl p-4 mb-6 flex items-start gap-3">
-      <Info className="w-5 h-5 text-figma-blue shrink-0 mt-0.5" />
-      <div className="flex-1">
-        <p className="text-figma-sm font-medium text-figma-primary">
-          Connect your CDN to track real bot traffic
-        </p>
-        <p className="text-figma-xs text-figma-secondary mt-1">
-          Currently showing demo data. Set up the webhook to see actual AI crawler activity on your site.
-        </p>
-      </div>
-      <button
-        onClick={onNavigate}
-        className="text-figma-sm font-medium text-figma-blue hover:underline shrink-0"
-      >
-        Go to Settings
-      </button>
-    </div>
   );
 }
 
@@ -701,9 +550,10 @@ interface SiteHealthSectionProps {
   isAuditing: boolean;
   initialLoading: boolean;
   onRunAudit: () => void;
+  readOnlyDemo: boolean;
 }
 
-function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: SiteHealthSectionProps) {
+function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit, readOnlyDemo }: SiteHealthSectionProps) {
   const { toast } = useToast();
   const [auditStepIndex, setAuditStepIndex] = useState(0);
 
@@ -751,9 +601,9 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
           <p className="mt-2 text-center text-figma-sm text-figma-secondary">
             Check your llms.txt, robots.txt, sitemap, and schema markup to see how AI crawlers find and understand your content.
           </p>
-          <Button onClick={onRunAudit} disabled={isAuditing} className="mt-8 w-full">
+          <Button onClick={onRunAudit} disabled={isAuditing || readOnlyDemo} className="mt-8 w-full">
             {isAuditing && <Loader2 className="h-4 w-4 animate-spin" />}
-            {isAuditing ? AUDIT_STEPS[auditStepIndex] : 'Run audit'}
+            {readOnlyDemo ? 'Unavailable in Demo' : isAuditing ? AUDIT_STEPS[auditStepIndex] : 'Run audit'}
           </Button>
         </div>
       </div>
@@ -969,22 +819,21 @@ function SiteHealthSection({ audit, isAuditing, initialLoading, onRunAudit }: Si
 // ============================================================================
 
 export function BotTrafficPage() {
-  const [, navigate] = useLocation();
   const search = useSearch();
   const { range, setRange } = useTimeRange('30d');
 
   // Get initial tab from URL
   const urlParams = new URLSearchParams(search);
   const mockEmptyPeriod = import.meta.env.DEV && urlParams.get('mock') === 'empty-period';
-  const mockDemoPreview = isDemoPreview();
   const tabParam = urlParams.get('tab');
   const initialTab = tabParam === 'by-type' ? 'by-type' : tabParam === 'site-health' ? 'site-health' : 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [scrollToRecentActivity, setScrollToRecentActivity] = useState(false);
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [botFilter, setBotFilter] = useState<string>('all');
 
   // Site health audit
-  const { audit, isAuditing, initialLoading: healthLoading, runAudit } = useSiteHealth();
+  const { audit, isAuditing, initialLoading: healthLoading, runAudit, readOnlyDemo } = useSiteHealth();
 
   // Data fetching
   const {
@@ -1019,18 +868,8 @@ export function BotTrafficPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  // Check if date range includes today (for demo data display)
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  const rangeIncludesToday = range.to >= today || range.to.toDateString() === new Date().toDateString();
-
-  // Raw recent visits - only show seeded demo data if range includes today
-  const hasRealData = recentData?.visits?.length && recentData.visits.length > 0;
-  const rawRecentVisits = mockDemoPreview && !mockEmptyPeriod
-    ? SEEDED_RECENT_VISITS
-    : hasRealData
-    ? recentData.visits
-    : (rangeIncludesToday ? SEEDED_RECENT_VISITS : []);
+  const { data: timelineData } = useBotTimeline(range);
+  const rawRecentVisits = recentData?.visits ?? [];
 
   // Process recent visits: filter, sort, paginate (must be before early returns)
   const { recentVisits, totalFiltered, totalPages } = useMemo(() => {
@@ -1130,10 +969,6 @@ export function BotTrafficPage() {
     setDateFilterOpen(true);
   };
 
-  const handleNavigateSettings = () => {
-    navigate('/app/settings/integrations');
-  };
-
   const handleRetryAll = () => {
     refetchStats();
     refetchAIBots();
@@ -1150,6 +985,12 @@ export function BotTrafficPage() {
     }
     window.history.replaceState({}, '', url.toString());
   };
+
+  useEffect(() => {
+    if (!scrollToRecentActivity || activeTab !== 'by-type') return;
+    document.getElementById('bot-recent-activity')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setScrollToRecentActivity(false);
+  }, [activeTab, scrollToRecentActivity]);
 
   // Combined loading state
   const isLoading = statsLoading || aiBotsLoading || recentLoading;
@@ -1181,58 +1022,56 @@ export function BotTrafficPage() {
     );
   }
 
-  // Use API data or fallback to demo data (only if range includes today)
   // Guarded with defaults so they don't crash during loading
   const noResultsForRange = mockEmptyPeriod || Boolean(
     statsData?.period?.hasHistoricalData && !statsData.period.hasDataInRange
   );
-  const isDemo = !mockEmptyPeriod && (mockDemoPreview || (statsData?.cdnConfigured !== true && !statsData?.period?.hasHistoricalData));
-  const showDemoData = !mockEmptyPeriod && (mockDemoPreview || (isDemo && rangeIncludesToday));
   const allBots = statsData?.byBot || [];
 
-  // Always show all supported bots from constants - merge with real/demo data
+  // Show supported bot types with counts returned by the API.
   const aiBots: BotStats[] = AI_BOTS.map(bot => {
-    const real = aiBotsData?.aiBots?.find(b => b.botType === bot.id);
-    const demo = DEMO_AI_VISITS[bot.id];
+    const real = findBotStats(aiBotsData?.aiBots ?? [], bot.id);
     return {
       botType: bot.id,
       category: 'ai',
-      visitCount: real?.visitCount ?? (showDemoData ? demo?.visits ?? 0 : 0),
-      uniqueUrls: real?.uniqueUrls ?? (showDemoData ? demo?.pages ?? 0 : 0),
-      lastVisit: real?.lastVisit ?? new Date().toISOString(),
+      visitCount: real?.visitCount ?? 0,
+      uniqueUrls: real?.uniqueUrls ?? 0,
+      lastVisit: real?.lastVisit ?? null,
     };
   });
 
   const searchBots: BotStats[] = SEARCH_BOTS.map(bot => {
-    const real = allBots.find(b => b.botType === bot.id);
-    const demo = DEMO_SEARCH_VISITS[bot.id];
+    const real = findBotStats(allBots, bot.id);
     return {
       botType: bot.id,
       category: 'search',
-      visitCount: real?.visitCount ?? (showDemoData ? demo?.visits ?? 0 : 0),
-      uniqueUrls: real?.uniqueUrls ?? (showDemoData ? demo?.pages ?? 0 : 0),
-      lastVisit: real?.lastVisit ?? new Date().toISOString(),
+      visitCount: real?.visitCount ?? 0,
+      uniqueUrls: real?.uniqueUrls ?? 0,
+      lastVisit: real?.lastVisit ?? null,
     };
   });
 
   const socialBots: BotStats[] = SOCIAL_BOTS.map(bot => {
-    const real = allBots.find(b => b.botType === bot.id);
-    const demo = DEMO_SOCIAL_VISITS[bot.id];
+    const real = findBotStats(allBots, bot.id);
     return {
       botType: bot.id,
       category: 'social',
-      visitCount: real?.visitCount ?? (showDemoData ? demo?.visits ?? 0 : 0),
-      uniqueUrls: real?.uniqueUrls ?? (showDemoData ? demo?.pages ?? 0 : 0),
-      lastVisit: real?.lastVisit ?? new Date().toISOString(),
+      visitCount: real?.visitCount ?? 0,
+      uniqueUrls: real?.uniqueUrls ?? 0,
+      lastVisit: real?.lastVisit ?? null,
     };
   });
 
-  const otherBots = allBots.filter(b => getBotCategory(b.botType) === 'other');
+  const otherBots = allBots.filter(bot => bot.category === 'other');
 
   // Calculate totals
   const totalAIVisits = aiBots.reduce((sum, b) => sum + b.visitCount, 0);
   const uniquePages = aiBots.reduce((sum, b) => sum + b.uniqueUrls, 0);
+  const hasAIData = totalAIVisits > 0;
   const hasData = totalAIVisits > 0 || rawRecentVisits.length > 0;
+  const searchVisitTotal = statsData?.searchVisits ?? 0;
+  const socialVisitTotal = statsData?.socialVisits ?? 0;
+  const otherVisitTotal = statsData?.otherVisits ?? 0;
 
   // Calculate top AI bot
   const topBot = aiBots.reduce((top, bot) =>
@@ -1255,10 +1094,10 @@ export function BotTrafficPage() {
     .map(([path, visits]) => ({ path, visits }))
     .sort((a, b) => b.visits - a.visits)
     .slice(0, 5);
-  const displayTopPages = topPages.length ? topPages : (showDemoData ? SEEDED_TOP_PAGES : []);
+  const displayTopPages = topPages;
 
   // Top bot's pages (filter recent visits by top bot type)
-  const topBotVisits = (rawRecentVisits.length > 0 ? rawRecentVisits : (showDemoData ? SEEDED_RECENT_VISITS : []))
+  const topBotVisits = rawRecentVisits
     .filter(v => v.botType === topBot.botType);
   const topBotPageMap: Record<string, { count: number; lastCrawl: string }> = {};
   topBotVisits.forEach(v => {
@@ -1276,14 +1115,13 @@ export function BotTrafficPage() {
     .sort((a, b) => b.visits - a.visits)
     .slice(0, 4);
 
-  // Calculate trend (mock for demo)
-  const trend = showDemoData ? 23.4 : (statsData?.aiVisits || 0) > 0 ? 12.5 : 0;
-  const topBotTrend = showDemoData ? 18.2 : 0;
-  const pagesTrend = showDemoData ? 12.5 : 0;
+  const trend = statsData?.trends.aiVisits ?? 0;
+  const topBotTrend = statsData?.trends.byBot[topBot.botType] ?? 0;
+  const pagesTrend = statsData?.trends.uniqueAiPages ?? 0;
 
   // Last seen time per bot (for Latest Activity card — all bot types)
   const allBotsList = [...AI_BOTS, ...SEARCH_BOTS, ...SOCIAL_BOTS];
-  const recentVisitsSource = rawRecentVisits.length > 0 ? rawRecentVisits : (showDemoData ? SEEDED_RECENT_VISITS : []);
+  const recentVisitsSource = rawRecentVisits;
   const lastSeenByBot: Record<string, string> = {};
   recentVisitsSource.forEach(v => {
     if (!lastSeenByBot[v.botType] || v.visitedAt > lastSeenByBot[v.botType]) {
@@ -1310,7 +1148,7 @@ export function BotTrafficPage() {
                 <span className="text-figma-xs">Updating...</span>
               </div>
             )}
-            {activeTab === 'site-health' && audit && (
+            {activeTab === 'site-health' && audit && !readOnlyDemo && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1363,11 +1201,6 @@ export function BotTrafficPage() {
         <TabsContent value="overview" forceMount className={activeTab !== 'overview' ? 'hidden' : ''}>
           {isLoading ? <PageSpinner /> : (<>
 
-      {/* Integration Banner — inside tab content, after tab line */}
-      {isDemo && (
-        <IntegrationBanner onNavigate={handleNavigateSettings} />
-      )}
-
       {/* ================================================================
           ROW 1 — 4 Metric Cards (horizontal scroll, matching competitors)
           ================================================================ */}
@@ -1379,7 +1212,7 @@ export function BotTrafficPage() {
               <CardLabel>Total AI visits</CardLabel>
               <InfoTooltip content="Total page visits from AI crawlers in this time period" />
             </div>
-            {!noResultsForRange && hasData ? (
+            {!noResultsForRange && hasAIData ? (
               <>
                 <StatMetric value={formatCompact(totalAIVisits)} trend={trend} />
                 <CardSubtitle>{getPeriodLabel(range.preset)}</CardSubtitle>
@@ -1431,7 +1264,7 @@ export function BotTrafficPage() {
               <CardLabel>Pages crawled</CardLabel>
               <InfoTooltip content="Number of unique URLs visited by AI crawlers" />
             </div>
-            {!noResultsForRange && hasData ? (
+            {!noResultsForRange && uniquePages > 0 ? (
               <>
                 <StatMetric value={uniquePages} trend={pagesTrend} />
                 <CardSubtitle>unique URLs</CardSubtitle>
@@ -1454,7 +1287,7 @@ export function BotTrafficPage() {
               }
             >
               {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
-                {hasData ? (
+                {hasAIData ? (
                   displayTopPages.slice(0, 4).map(page => (
                     <div key={page.path} className="flex items-center gap-2">
                       <span className="text-figma-2xs text-figma-secondary truncate flex-1 min-w-0">{page.path}</span>
@@ -1464,12 +1297,7 @@ export function BotTrafficPage() {
                     </div>
                   ))
                 ) : (
-                  ['/page-1', '/page-2', '/page-3', '/page-4'].map(path => (
-                    <div key={path} className="flex items-center gap-2">
-                      <span className="text-figma-2xs text-figma-muted truncate flex-1 min-w-0">{path}</span>
-                      <span className="text-figma-2xs text-figma-muted tabular-nums w-10 text-right">—</span>
-                    </div>
-                  ))
+                  <p className="py-2 text-figma-2xs text-figma-muted">No crawled pages yet</p>
                 )}
               </div>}
             </MetricListScroller>
@@ -1483,14 +1311,23 @@ export function BotTrafficPage() {
               <CardLabel>Top AI bot</CardLabel>
               <InfoTooltip content="The AI crawler with the most visits this period" />
             </div>
-            {!noResultsForRange && hasData ? (
+            {!noResultsForRange && hasAIData ? (
               <>
-                <div className="h-[38px] flex items-center mt-2 mb-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="self-center"><BotIcon botType={topBot.botType} size="md" /></span>
-                    <span className="text-figma-lg font-bold text-figma-primary leading-none">{botToDisplayName(topBot.botType)}</span>
+                <div className="h-[38px] flex items-center mt-2 mb-1 min-w-0">
+                  <div className="flex items-baseline gap-2 min-w-0 w-full">
+                    <span className="self-center shrink-0"><BotIcon botType={topBot.botType} size="md" /></span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="min-w-0 flex-1 truncate text-figma-lg font-bold text-figma-primary leading-none">
+                          {botToDisplayName(topBot.botType)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="whitespace-nowrap">
+                        {botToDisplayName(topBot.botType)}
+                      </TooltipContent>
+                    </Tooltip>
                     <span className={cn(
-                      'text-figma-base font-semibold tabular-nums',
+                      'shrink-0 text-figma-base font-semibold tabular-nums',
                       topBotTrend >= 0 ? 'text-figma-trend-up' : 'text-figma-trend-down'
                     )}>
                       {topBotTrend >= 0 ? '+' : ''}{topBotTrend}%
@@ -1518,7 +1355,7 @@ export function BotTrafficPage() {
               }
             >
               {noResultsForRange ? <NoPeriodRows /> : <div className="space-y-1.5">
-                {hasData ? (
+                {hasAIData ? (
                   topBotPages.map(page => (
                     <div key={page.path} className="flex items-center gap-2">
                       <span className="text-figma-2xs text-figma-secondary truncate flex-1 min-w-0">{page.path}</span>
@@ -1531,13 +1368,7 @@ export function BotTrafficPage() {
                     </div>
                   ))
                 ) : (
-                  ['/page-1', '/page-2', '/page-3', '/page-4'].map(path => (
-                    <div key={path} className="flex items-center gap-2">
-                      <span className="text-figma-2xs text-figma-muted truncate flex-1 min-w-0">{path}</span>
-                      <span className="text-figma-2xs text-figma-muted tabular-nums w-8 text-right">—</span>
-                      <span className="text-figma-2xs text-figma-muted tabular-nums w-16 text-right">—</span>
-                    </div>
-                  ))
+                  <p className="py-2 text-figma-2xs text-figma-muted">No crawled pages yet</p>
                 )}
               </div>}
             </MetricListScroller>
@@ -1618,7 +1449,7 @@ export function BotTrafficPage() {
           ) : (
             <BotTrafficChart
               bots={aiBotsWithPercent}
-              timeRange={range}
+              data={(timelineData?.points ?? []).map(point => ({ date: point.date, ...point.visits }))}
               height={280}
             />
           )}
@@ -1632,10 +1463,10 @@ export function BotTrafficPage() {
         {/* Left: AI Bot Breakdown */}
         <ContentCard
           title="AI bot breakdown"
-          subtitle="Visits by AI crawler"
-          footer={!noResultsForRange ? (
+          subtitle="Visits by AI crawlers"
+          footer={!noResultsForRange && totalAIVisits > 0 ? (
             <InsightBox variant="muted">
-              {topBot.botType} is your most active AI crawler, accounting for {aiBotsWithPercent[0]?.percentage || 0}% of visits.
+              {topBot.botType} is your most active AI crawler, accounting for {Math.round((topBot.visitCount / totalAIVisits) * 100)}% of visits.
             </InsightBox>
           ) : undefined}
         >
@@ -1662,10 +1493,10 @@ export function BotTrafficPage() {
                   <span className="text-figma-sm text-figma-primary">{botToDisplayName(bot.botType)}</span>
                 </div>
                 <span className="text-figma-sm font-medium text-figma-primary tabular-nums text-right">
-                  {bot.visitCount.toLocaleString()}
+                  {totalAIVisits > 0 ? bot.visitCount.toLocaleString() : '—'}
                 </span>
                 <span className="text-figma-xs text-figma-muted tabular-nums text-right">
-                  {bot.percentage}%
+                  {totalAIVisits > 0 ? `${bot.percentage}%` : '—'}
                 </span>
               </div>
             ))}
@@ -1676,14 +1507,17 @@ export function BotTrafficPage() {
         <ContentCard
           title="Top crawled pages"
           subtitle="Most visited URLs by AI bots"
-          onAction={() => navigate('/app/bots')}
-          footer={!noResultsForRange ? (() => {
+          onAction={() => {
+            setScrollToRecentActivity(true);
+            handleTabChange('by-type');
+          }}
+          footer={!noResultsForRange && displayTopPages.length > 0 ? (() => {
             // Calculate insight based on content type
             const blogCount = displayTopPages.filter(p => p.path.includes('/blog')).reduce((s, p) => s + p.visits, 0);
             const docsCount = displayTopPages.filter(p => p.path.includes('/docs')).reduce((s, p) => s + p.visits, 0);
             const ratio = blogCount > 0 && docsCount > 0 ? (blogCount / docsCount).toFixed(1) : null;
 
-            let insight = `${displayTopPages[0]?.path} is your most indexed page by AI bots.`;
+            let insight = `${displayTopPages[0].path} is your most indexed page by AI bots.`;
             if (blogCount > docsCount && ratio) {
               insight = `Blog content gets ${ratio}x more AI crawls than documentation.`;
             } else if (docsCount > blogCount) {
@@ -1705,6 +1539,12 @@ export function BotTrafficPage() {
             {/* Rows */}
             {noResultsForRange ? (
               <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
+            ) : displayTopPages.length === 0 ? (
+              <CardEmptyState
+                icon={Search}
+                title="No crawled pages yet"
+                description="Pages will appear here after AI bots crawl your site."
+              />
             ) : displayTopPages.map(page => (
               <div
                 key={page.path}
@@ -1733,10 +1573,10 @@ export function BotTrafficPage() {
             <MetricCard>
               <CardLabel>AI bots</CardLabel>
               <StatMetric
-                value={noResultsForRange ? '—' : formatCompact(totalAIVisits)}
+                value={noResultsForRange || totalAIVisits === 0 ? '—' : formatCompact(totalAIVisits)}
                 trend={noResultsForRange ? 0 : trend}
               />
-              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${aiBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardSubtitle>{noResultsForRange || totalAIVisits === 0 ? '— crawlers active' : `${aiBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
               <CardDivider className="mt-5 mb-1.5" />
               <MetricListScroller
                 header={
@@ -1772,10 +1612,10 @@ export function BotTrafficPage() {
             <MetricCard>
               <CardLabel>Search bots</CardLabel>
               <StatMetric
-                value={noResultsForRange ? '—' : formatCompact(showDemoData ? searchBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.searchVisits || 0))}
-                trend={noResultsForRange ? 0 : showDemoData ? 8.3 : 0}
+                value={noResultsForRange || searchVisitTotal === 0 ? '—' : formatCompact(searchVisitTotal)}
+                trend={noResultsForRange ? 0 : statsData?.trends.searchVisits ?? 0}
               />
-              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${searchBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardSubtitle>{noResultsForRange || searchVisitTotal === 0 ? '— crawlers active' : `${searchBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
               <CardDivider className="mt-5 mb-1.5" />
               <MetricListScroller
                 header={
@@ -1811,10 +1651,10 @@ export function BotTrafficPage() {
             <MetricCard>
               <CardLabel>Social bots</CardLabel>
               <StatMetric
-                value={noResultsForRange ? '—' : formatCompact(showDemoData ? socialBots.reduce((sum, b) => sum + b.visitCount, 0) : (statsData?.socialVisits || 0))}
-                trend={noResultsForRange ? 0 : showDemoData ? 5.1 : 0}
+                value={noResultsForRange || socialVisitTotal === 0 ? '—' : formatCompact(socialVisitTotal)}
+                trend={noResultsForRange ? 0 : statsData?.trends.socialVisits ?? 0}
               />
-              <CardSubtitle>{noResultsForRange ? '— crawlers active' : `${socialBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
+              <CardSubtitle>{noResultsForRange || socialVisitTotal === 0 ? '— crawlers active' : `${socialBots.filter(b => b.visitCount > 0).length} crawlers active`}</CardSubtitle>
               <CardDivider className="mt-5 mb-1.5" />
               <MetricListScroller
                 header={
@@ -1850,10 +1690,10 @@ export function BotTrafficPage() {
             <MetricCard>
               <CardLabel>Other bots</CardLabel>
               <StatMetric
-                value={noResultsForRange ? '—' : formatCompact(statsData?.otherVisits || 0)}
-                trend={noResultsForRange ? 0 : showDemoData ? -2.4 : 0}
+                value={noResultsForRange || otherVisitTotal === 0 ? '—' : formatCompact(otherVisitTotal)}
+                trend={noResultsForRange ? 0 : statsData?.trends.otherVisits ?? 0}
               />
-              <CardSubtitle>{noResultsForRange ? '— bot types detected' : `${otherBots.length} bot types detected`}</CardSubtitle>
+              <CardSubtitle>{noResultsForRange || otherVisitTotal === 0 ? 'No bot types detected' : `${otherBots.length} bot types detected`}</CardSubtitle>
               <CardDivider className="mt-5 mb-1.5" />
               <MetricListScroller
                 header={
@@ -1874,14 +1714,14 @@ export function BotTrafficPage() {
                       <span className="text-figma-2xs text-figma-secondary truncate">{botToDisplayName(bot.botType)}</span>
                     </div>
                     <span className="text-figma-2xs font-medium text-figma-primary tabular-nums w-12 text-right">
-                      {formatCompact(bot.visitCount)}
+                      {bot.visitCount > 0 ? formatCompact(bot.visitCount) : '—'}
                     </span>
                     <span className="text-figma-2xs text-figma-muted tabular-nums w-10 text-right">
-                      {bot.uniqueUrls}
+                      {bot.uniqueUrls > 0 ? bot.uniqueUrls : '—'}
                     </span>
                   </div>
                   )) : (
-                    <span className="text-figma-2xs text-figma-muted">Monitors, scanners, misc crawlers</span>
+                    <span className="text-figma-2xs text-figma-muted">No other bot activity detected.</span>
                   )}
                 </div>}
               </MetricListScroller>
@@ -1891,11 +1731,12 @@ export function BotTrafficPage() {
           {/* ================================================================
               ROW 2 — Recent Bot Activity (moved from Overview)
               ================================================================ */}
-          <ContentCard
-            title="Recent activity"
-            subtitle="Latest crawler activity on your site"
-            contentClassName="pt-0"
-            headerRight={
+          <div id="bot-recent-activity">
+            <ContentCard
+              title="Recent activity"
+              subtitle="Latest crawler activity on your site"
+              contentClassName="pt-0"
+              headerRight={
               <div className="flex items-center gap-2">
                 <FilterSearch
                   value={searchQuery}
@@ -1935,8 +1776,8 @@ export function BotTrafficPage() {
                   Export
                 </Button>
               </div>
-            }
-          >
+              }
+            >
             {/* Recent Activity Table - using fr units like competitors table */}
             <div className="grid grid-cols-[2fr_3fr_5fr_2fr_2fr_2fr_2fr] gap-2 px-2 py-2 border-b border-figma-border-light">
               <button
@@ -1968,15 +1809,13 @@ export function BotTrafficPage() {
               {noResultsForRange ? (
                 <NoPeriodState onAdjustDateRange={handleAdjustDateRange} />
               ) : recentVisits.length === 0 ? (
-                <div className="grid grid-cols-[2fr_3fr_5fr_2fr_2fr_2fr_2fr] gap-2 items-center px-2 py-2 text-figma-muted">
-                  <span>—</span>
-                  <span>—</span>
-                  <span>—</span>
-                  <span className="text-right">—</span>
-                  <span className="text-right">—</span>
-                  <span className="text-right">—</span>
-                  <span className="text-right">—</span>
-                </div>
+                <CardEmptyState
+                  icon={Search}
+                  title={rawRecentVisits.length === 0 ? 'No crawler activity yet' : 'No matching activity'}
+                  description={rawRecentVisits.length === 0
+                    ? 'Activity will appear here when bots visit your site.'
+                    : 'Try changing your search or filters.'}
+                />
               ) : (
                 recentVisits.map(visit => {
                   const category = getBotCategory(visit.botType);
@@ -2039,34 +1878,17 @@ export function BotTrafficPage() {
             </div>
 
             {/* Pagination */}
-            {!noResultsForRange && totalPages > 1 && (
-              <div className="flex items-center justify-between pt-4 mt-4 border-t border-figma-border-light">
-                <span className="text-figma-xs text-figma-muted">
-                  Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="h-7 px-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-7 px-2"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
+            {!noResultsForRange && (
+              <TablePagination
+                offset={(currentPage - 1) * pageSize}
+                pageSize={pageSize}
+                total={totalFiltered}
+                onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              />
             )}
-          </ContentCard>
+            </ContentCard>
+          </div>
           </>)}
         </TabsContent>
 
@@ -2077,6 +1899,7 @@ export function BotTrafficPage() {
             isAuditing={isAuditing}
             initialLoading={healthLoading}
             onRunAudit={runAudit}
+            readOnlyDemo={readOnlyDemo}
           />
         </TabsContent>
       </Tabs>

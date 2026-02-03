@@ -29,7 +29,6 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearch, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
-import { DEMO_CONFIG } from '@/config/app';
 import { workspaceFetch } from '@/lib/workspace-query';
 import { useToast } from '@/hooks/use-toast';
 
@@ -60,6 +59,7 @@ import {
   ContentCard,
   SentimentBadge,
   TableHeader,
+  TablePagination,
   InsightBox,
   StaleDataWarning,
 } from '@/components/shared';
@@ -349,27 +349,31 @@ function TrendingPromptsCard({
 function PromptsTable({
   prompts,
   total,
-  hasMore,
-  isLoadingMore,
+  offset,
+  pageSize,
+  isFetching,
   topics,
   selectedTopic,
   searchQuery,
   onTopicChange,
   onSearchChange,
-  onLoadMore,
+  onPrevious,
+  onNext,
   onRowClick,
   stageTab,
 }: {
   prompts: Prompt[];
   total: number;
-  hasMore: boolean;
-  isLoadingMore?: boolean;
+  offset: number;
+  pageSize: number;
+  isFetching?: boolean;
   topics: { id: string; name: string; promptCount: number }[];
   selectedTopic: string | null;
   searchQuery: string;
   onTopicChange: (topic: string | null) => void;
   onSearchChange: (query: string) => void;
-  onLoadMore: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
   onRowClick: (prompt: Prompt) => void;
   stageTab: BuyerJourneyStage | 'all';
 }) {
@@ -490,20 +494,14 @@ function PromptsTable({
             ))}
           </div>
 
-          {hasMore && (
-            <div className="flex justify-center pt-4 pb-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onLoadMore}
-                disabled={isLoadingMore}
-                className="text-figma-sm"
-              >
-                {isLoadingMore && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                Show 25 more
-              </Button>
-            </div>
-          )}
+          <TablePagination
+            offset={offset}
+            pageSize={pageSize}
+            total={total}
+            disabled={isFetching}
+            onPrevious={onPrevious}
+            onNext={onNext}
+          />
         </>
       )}
     </ContentCard>
@@ -886,6 +884,7 @@ export function PromptsPage() {
   const [selectedTopic, setSelectedTopic] = useState<string | null>(() => urlParams.get('topic'));
   const [searchQuery, setSearchQuery] = useState(() => urlParams.get('search') ?? '');
   const [offset, setOffset] = useState(0);
+  const pageSize = 25;
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [isAddPromptOpen, setIsAddPromptOpen] = useState(false);
   const [newPromptText, setNewPromptText] = useState('');
@@ -917,7 +916,7 @@ export function PromptsPage() {
     stage: activeTab !== 'all' ? activeTab : undefined,
     topic: selectedTopic || undefined,
     search: searchQuery || undefined,
-    limit: 25,
+    limit: pageSize,
     offset,
   });
 
@@ -965,9 +964,18 @@ export function PromptsPage() {
     setSelectedPromptId(null);
   };
 
-  const handleLoadMore = () => {
-    setOffset((prev) => prev + 25);
+  const handleTopicChange = (topic: string | null) => {
+    setSelectedTopic(topic);
+    setOffset(0);
   };
+
+  const handlePromptSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setOffset(0);
+  };
+
+  const handlePreviousPage = () => setOffset((prev) => Math.max(0, prev - pageSize));
+  const handleNextPage = () => setOffset((prev) => prev + pageSize);
 
   const handleRetry = () => {
     refetchFunnel();
@@ -1186,14 +1194,16 @@ export function PromptsPage() {
             <PromptsTable
               prompts={promptsData?.prompts || []}
               total={promptsData?.total || 0}
-              hasMore={promptsData?.hasMore || false}
-              isLoadingMore={promptsFetching && offset > 0}
+              offset={offset}
+              pageSize={pageSize}
+              isFetching={promptsFetching}
               topics={topicsData?.topics || []}
               selectedTopic={selectedTopic}
               searchQuery={searchQuery}
-              onTopicChange={setSelectedTopic}
-              onSearchChange={setSearchQuery}
-              onLoadMore={handleLoadMore}
+              onTopicChange={handleTopicChange}
+              onSearchChange={handlePromptSearchChange}
+              onPrevious={handlePreviousPage}
+              onNext={handleNextPage}
               onRowClick={handleRowClick}
               stageTab={activeTab}
             />

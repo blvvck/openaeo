@@ -11,12 +11,10 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getDemoCompare, getDemoCompetitors, getDemoMetrics, getDemoPlatformRanks, getDemoTrends, isDemoPreview } from '@/lib/demo-preview';
 import type {
   CompetitorsResponse,
   CompetitorsByPlatformResponse,
   CompetitorCompareResponse,
-  CompetitorSearchResponse,
   CompetitorMetricsResponse,
   TimeRangePreset,
 } from '@shared/types';
@@ -36,7 +34,6 @@ export function useCompetitors(timeRange: TimeRangePreset) {
   return useQuery<CompetitorsResponse>({
     queryKey: ['competitors', timeRange],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoCompetitors();
       const res = await fetch(`/api/competitors?timeRange=${timeRange}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -57,7 +54,6 @@ export function useCompetitorsByPlatform(timeRange: TimeRangePreset) {
   return useQuery<CompetitorsByPlatformResponse>({
     queryKey: ['competitors', 'by-platform', timeRange],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoPlatformRanks();
       const res = await fetch(`/api/competitors/by-platform?timeRange=${timeRange}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -85,7 +81,6 @@ export function useCompetitorCompare(competitorId: string | null, timeRange: Tim
       if (!competitorId) {
         throw new Error('No competitor selected');
       }
-      if (isDemoPreview()) return getDemoCompare(competitorId);
       const res = await fetch(`/api/competitors/${encodeURIComponent(competitorId)}/compare?timeRange=${timeRange}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -100,36 +95,6 @@ export function useCompetitorCompare(competitorId: string | null, timeRange: Tim
 }
 
 /**
- * Search for a competitor by domain
- * Uses the Add Competitor Wizard SSE endpoint
- * TODO: Wire to POST /api/competitors/discover when search mode is added
- */
-export function useCompetitorSearch() {
-  const queryClient = useQueryClient();
-
-  return useMutation<CompetitorSearchResponse, Error, string>({
-    mutationFn: async (domain: string) => {
-      // The search is currently handled by the Add Competitor Modal
-      // which uses the SSE discover endpoint directly
-      // This hook is a placeholder for a future search-only endpoint
-      const normalized = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-
-      // For now, return a mock response
-      return {
-        found: true,
-        competitor: {
-          name: normalized.split('.')[0].charAt(0).toUpperCase() + normalized.split('.')[0].slice(1),
-          domain: normalized,
-          score: 0,
-          platforms: [],
-          alreadyTracked: false,
-        },
-      };
-    },
-  });
-}
-
-/**
  * Add a competitor
  * Uses POST /api/competitors/add from the Add Competitor Wizard
  */
@@ -138,7 +103,6 @@ export function useAddCompetitor() {
 
   return useMutation<{ success: boolean }, Error, { domain: string; name: string; score: number; platforms: string[] }>({
     mutationFn: async (data) => {
-      if (isDemoPreview()) throw new Error('Demo preview is read-only');
       const res = await fetch('/api/competitors/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,7 +137,6 @@ export function useDeleteCompetitor() {
 
   return useMutation<{ success: boolean; message: string }, Error, string>({
     mutationFn: async (competitorId) => {
-      if (isDemoPreview()) throw new Error('Demo preview is read-only');
       const res = await fetch(`/api/competitors/${encodeURIComponent(competitorId)}`, {
         method: 'DELETE',
       });
@@ -211,7 +174,6 @@ export function useCompetitorMetrics(range: TimeRangePreset) {
   return useQuery<CompetitorMetricsResponse>({
     queryKey: ['competitor-metrics', range],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoMetrics();
       const res = await fetch(`/api/competitors/metrics?range=${range}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -262,7 +224,6 @@ export function useCompetitorTrends(timeRange: TimeRangePreset) {
   return useQuery<CompetitorTrendsResponse>({
     queryKey: ['competitors', 'trends', timeRange],
     queryFn: async () => {
-      if (isDemoPreview()) return getDemoTrends(timeRange);
       const res = await fetch(`/api/competitors/trends?timeRange=${timeRange}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
