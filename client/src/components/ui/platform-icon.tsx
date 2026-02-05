@@ -63,6 +63,12 @@ export const SOCIAL_BOTS = [
   { id: 'Slackbot', name: 'Slackbot', icon: 'slack' },
 ] as const;
 
+export function getBotIconId(botType: string): string | null {
+  const bots = [...AI_BOTS, ...SEARCH_BOTS, ...SOCIAL_BOTS];
+  const normalizedType = botType.toLowerCase();
+  return bots.find(bot => bot.id.toLowerCase() === normalizedType || bot.name.toLowerCase() === normalizedType)?.icon ?? null;
+}
+
 /**
  * Official platform logo SVG components
  * These are simplified versions of official brand marks for use as icons

@@ -17,6 +17,7 @@ export { SentimentBadge, SENTIMENT_COLORS, SENTIMENT_TEXT } from './sentiment-ba
 export { StatMetric, MetricStatCard, MetricListScroller, HoverArrow, CardLabel, CardSubtitle, CardDivider } from './stat-metric';
 export { CardFooterSummary } from './card-footer-summary';
 export { PlatformRow, PlatformProgressRow, TableHeader } from './platform-row';
+export { TablePagination } from './table-pagination';
 
 // Page-level shared components
 export { PageHeader } from './page-header';

@@ -9,17 +9,15 @@ import { useMemo } from 'react';
 import {
   AreaChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import { ChartContainer } from '@/components/ui/data-visualization';
 import { PlatformIcon, getPlatformColor, AI_BOTS, SEARCH_BOTS, SOCIAL_BOTS } from '@/components/ui/platform-icon';
-import { cn } from '@/lib/utils';
-import type { TimeRange } from '@/components/charts/time-range-selector';
 
 // Get bot icon ID from constants
 function botToIcon(botType: string): string | null {
@@ -46,7 +44,7 @@ interface BotStats {
 
 interface BotTrafficChartProps {
   bots: BotStats[];
-  timeRange: TimeRange;
+  data: ChartDataPoint[];
   height?: number;
   className?: string;
 }
@@ -56,45 +54,9 @@ interface ChartDataPoint {
   [key: string]: string | number;
 }
 
-/**
- * Generate mock daily data for the chart
- * In production, this would come from an API endpoint
- */
-function generateChartData(bots: BotStats[], timeRange: TimeRange): ChartDataPoint[] {
-  const data: ChartDataPoint[] = [];
-  const { from, to } = timeRange;
-
-  // Calculate number of days
-  const diffTime = Math.abs(to.getTime() - from.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  const numDays = Math.min(diffDays, 30); // Max 30 data points
-
-  // Calculate daily average for each bot
-  const dailyAverages: Record<string, number> = {};
-  bots.forEach(bot => {
-    dailyAverages[bot.botType] = Math.round(bot.visitCount / numDays);
-  });
-
-  // Generate data points with some variation
-  for (let i = 0; i < numDays; i++) {
-    const date = new Date(from);
-    date.setDate(date.getDate() + i);
-
-    const point: ChartDataPoint = {
-      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    };
-
-    bots.forEach((bot, botIndex) => {
-      const avg = dailyAverages[bot.botType];
-      const variation = (((i + 1) * (botIndex + 3)) % 9 - 4) / 20;
-      const value = Math.max(0, Math.round(avg * (1 + variation)));
-      point[bot.botType] = value;
-    });
-
-    data.push(point);
-  }
-
-  return data;
+function formatTimelineDate(value: string): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 /**
@@ -104,18 +66,36 @@ function CustomTooltip({
   active,
   payload,
   label,
+  isEmpty,
 }: {
   active?: boolean;
   payload?: Array<{ name: string; value: number; color: string }>;
   label?: string;
+  isEmpty?: boolean;
 }) {
-  if (!active || !payload || !payload.length) return null;
+  if (!active) return null;
+
+  if (isEmpty || (payload?.length && payload.every(entry => entry.value === 0))) {
+    return (
+      <div className="bg-figma-card border border-figma-border rounded-xl px-3 py-2 shadow-lg">
+        <p className="text-figma-xs font-medium text-figma-primary mb-1">
+          {label ? formatTimelineDate(label) : 'No bot traffic data yet'}
+        </p>
+        <p className="text-figma-2xs text-figma-muted">
+          Bot traffic data will appear here after crawlers visit your site.
+        </p>
+      </div>
+    );
+  }
+
+  if (!payload?.length) return null;
 
   const total = payload.reduce((sum, entry) => sum + entry.value, 0);
+  const displayLabel = label ? formatTimelineDate(label) : '';
 
   return (
     <div className="bg-figma-card border border-figma-border rounded-xl px-3 py-2 shadow-lg">
-      <p className="text-figma-xs font-medium text-figma-primary mb-2">{label}</p>
+      <p className="text-figma-xs font-medium text-figma-primary mb-2">{displayLabel}</p>
       <div className="space-y-1">
         {payload.map((entry) => (
           <div key={entry.name} className="flex items-center justify-between gap-4">
@@ -162,15 +142,19 @@ function CustomLegend({ bots }: { bots: BotStats[] }) {
 
 export function BotTrafficChart({
   bots,
-  timeRange,
+  data,
   height = 280,
   className,
 }: BotTrafficChartProps) {
-  // Generate chart data
-  const chartData = useMemo(
-    () => generateChartData(bots, timeRange),
-    [bots, timeRange]
-  );
+  const chartData = data;
+  const hasVisits = chartData.some(point => bots.some(bot => Number(point[bot.botType]) > 0));
+  const chartPoints = hasVisits
+    ? chartData
+    : chartData.map(point => ({ ...point, noDataHover: 2 }));
+  const tickEvery = Math.max(1, Math.ceil((chartData.length - 1) / 11));
+  const dateTicks = chartData
+    .filter((_, index) => index % tickEvery === 0)
+    .map(point => point.date);
 
   // Build chart config for ChartContainer
   const chartConfig = useMemo(() => {
@@ -190,65 +174,10 @@ export function BotTrafficChart({
     [bots]
   );
 
-  // Empty state with curvy dashed placeholder line
-  if (!bots.length) {
-    // Generate placeholder data for empty state (curvy wave pattern)
-    const emptyData: ChartDataPoint[] = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      const waveValue = 50 + Math.sin((i / 7) * Math.PI * 2) * 15;
-      emptyData.push({
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        placeholder: Math.round(waveValue),
-      });
-    }
-
+  if (!bots.length || !chartData.length) {
     return (
       <div className={className}>
-        <ChartContainer config={{}} className="w-full" style={{ height }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={emptyData} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="var(--figma-border-light, #E8EAED)"
-                strokeOpacity={0.6}
-                vertical={false}
-              />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: 'var(--figma-muted, #9CA3B0)' }}
-                tickLine={false}
-                axisLine={{ stroke: 'var(--figma-border-light, #E8EAED)' }}
-              />
-              <YAxis
-                width={40}
-                tick={{ fontSize: 11, fill: 'var(--figma-muted, #9CA3B0)' }}
-                tickLine={false}
-                axisLine={false}
-                domain={[0, 100]}
-              />
-              <Tooltip
-                content={({ active }) =>
-                  active ? (
-                    <div className="bg-figma-card border border-figma-border rounded-xl px-3 py-2 shadow-lg">
-                      <p className="text-figma-xs text-figma-muted">No data yet</p>
-                    </div>
-                  ) : null
-                }
-              />
-              <Area
-                type="monotone"
-                dataKey="placeholder"
-                stroke="#D1D5DB"
-                strokeWidth={1.5}
-                strokeDasharray="4 4"
-                fill="none"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartContainer>
-        <div className="flex items-center justify-center mt-4">
+        <div className="flex items-center justify-center" style={{ height }}>
           <p className="text-figma-xs text-figma-muted">Bot traffic data will appear here</p>
         </div>
       </div>
@@ -260,8 +189,8 @@ export function BotTrafficChart({
       <ChartContainer config={chartConfig} className="w-full" style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
-            data={chartData}
-            margin={{ top: 8, right: 16, left: 16, bottom: 8 }}
+            data={chartPoints}
+            margin={{ top: 8, right: 40, left: 0, bottom: 8 }}
           >
             <defs>
               {sortedBots.map(bot => (
@@ -293,6 +222,12 @@ export function BotTrafficChart({
             />
             <XAxis
               dataKey="date"
+              ticks={dateTicks}
+              tickFormatter={formatTimelineDate}
+              interval="preserveStartEnd"
+              minTickGap={24}
+              tickMargin={8}
+              padding={{ left: 36, right: 36 }}
               tick={{ fontSize: 11, fill: 'var(--figma-muted, #9CA3B0)' }}
               tickLine={false}
               axisLine={{ stroke: 'var(--figma-border-light, #E8EAED)' }}
@@ -307,7 +242,16 @@ export function BotTrafficChart({
                 return value;
               }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip isEmpty={!hasVisits} />} />
+            {!hasVisits && (
+              <Line
+                dataKey="noDataHover"
+                stroke="transparent"
+                dot={false}
+                activeDot={false}
+                isAnimationActive={false}
+              />
+            )}
             {sortedBots.map(bot => (
               <Area
                 key={bot.botType}
@@ -317,6 +261,7 @@ export function BotTrafficChart({
                 stroke={getBotColor(bot.botType)}
                 fill={`url(#fill-${bot.botType.replace(/[^a-zA-Z0-9]/g, '')})`}
                 strokeWidth={2}
+                isAnimationActive={false}
               />
             ))}
           </AreaChart>

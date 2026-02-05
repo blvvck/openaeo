@@ -1,5 +1,6 @@
 
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { MoreVertical, Trash2 } from 'lucide-react';
 import { PlatformIcon } from '@/components/ui/platform-icon';
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/action-menu';
 import type { CompetitorDetail } from '@shared/types';
+import { TablePagination } from '@/components/shared';
 
 interface CompetitorLeaderboardExtendedProps {
   competitors: CompetitorDetail[];
@@ -26,6 +28,12 @@ export function CompetitorLeaderboardExtended({
   className,
 }: CompetitorLeaderboardExtendedProps) {
   const sortedData = [...competitors].sort((a, b) => a.rank - b.rank);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const offset = (currentPage - 1) * pageSize;
+  const pageData = sortedData.slice(offset, offset + pageSize);
 
   return (
     <div className={cn('w-full', className)}>
@@ -41,7 +49,7 @@ export function CompetitorLeaderboardExtended({
           Share of answers
         </span>
         <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal text-right">
-          HIGH-INTENT
+          High-intent
         </span>
         <span className="text-figma-2xs font-medium text-figma-secondary tracking-normal pl-3">
           Top prompt
@@ -65,7 +73,7 @@ export function CompetitorLeaderboardExtended({
 
       {/* Table Body */}
       <div className="divide-y divide-figma-border-light">
-        {sortedData.map((competitor) => (
+        {pageData.map((competitor) => (
           <div
             key={competitor.id}
             onClick={() => !competitor.isYou && onRowClick?.(competitor)}
@@ -168,6 +176,13 @@ export function CompetitorLeaderboardExtended({
           </div>
         ))}
       </div>
+      <TablePagination
+        offset={offset}
+        pageSize={pageSize}
+        total={sortedData.length}
+        onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+        onNext={() => setPage((current) => Math.min(totalPages, current + 1))}
+      />
     </div>
   );
 }

@@ -246,28 +246,9 @@ function MiniTableEmpty({ message }: { message: string }) {
   return (
     <>
       <MiniTableHeader />
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-figma-border-light last:border-0">
-          {/* Topic name - show message on first row only */}
-          <div className="col-span-5">
-            <span className="text-figma-xs text-figma-muted">
-              {i === 0 ? message : '—'}
-            </span>
-          </div>
-          {/* Mentions */}
-          <div className="col-span-2 flex items-center justify-end">
-            <span className="text-figma-xs text-figma-muted">—</span>
-          </div>
-          {/* Position */}
-          <div className="col-span-2 flex items-center justify-end">
-            <span className="text-figma-xs text-figma-muted">—</span>
-          </div>
-          {/* Trend */}
-          <div className="col-span-3 flex items-center justify-end">
-            <span className="text-figma-xs text-figma-muted">—</span>
-          </div>
-        </div>
-      ))}
+      <div className="px-3 py-4 text-figma-xs text-figma-muted">
+        {message}
+      </div>
     </>
   );
 }
@@ -288,7 +269,7 @@ function TopicCard({
   const Icon = config.icon;
 
   return (
-    <Card className="h-[320px] border-figma-border rounded-xl bg-figma-card flex flex-col">
+    <Card className="h-[360px] border-figma-border rounded-xl bg-figma-card flex flex-col">
       <CardContent className="p-0 flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-2 px-4 pt-4 pb-3">

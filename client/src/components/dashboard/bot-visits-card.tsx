@@ -1,8 +1,7 @@
 import { MetricCard } from '@/components/shared';
 import { StatMetric, HoverArrow, CardSubtitle, CardDivider } from '@/components/shared';
-import { PlatformRow } from '@/components/shared';
-import { PLATFORMS } from '@/components/ui/platform-icon';
-import { Info } from 'lucide-react';
+import { PlatformIcon, getBotIconId } from '@/components/ui/platform-icon';
+import { Info, Globe } from 'lucide-react';
 import {
     Tooltip,
     TooltipContent,
@@ -70,29 +69,29 @@ export function BotVisitsCard({
                 </div>
             ) : (
                 <div className="max-h-[100px] overflow-y-auto scrollbar-none space-y-3">
-                    {bots.length > 0 ? (
-                        bots.map((bot) => (
-                            <PlatformRow
-                                key={bot.id}
-                                platformId={bot.id}
-                                name={bot.name}
-                                iconSize="xs"
-                                value={`${bot.percentage}%`}
-                                secondaryValue={bot.count}
-                            />
-                        ))
-                    ) : (
-                        PLATFORMS.slice(0, 5).map((p) => (
-                            <PlatformRow
-                                key={p.id}
-                                platformId={p.id}
-                                name={p.name}
-                                iconSize="sm"
-                                value="—%"
-                                secondaryValue="—"
-                                muted
-                            />
-                        ))
+                    {bots.length > 0 ? bots.map((bot) => {
+                        const iconId = getBotIconId(bot.id);
+
+                        return (
+                            <div key={bot.id} className="flex items-center justify-between gap-2 text-figma-2xs">
+                                <span className="flex min-w-0 items-center gap-2">
+                                    {iconId ? (
+                                        <PlatformIcon platform={iconId} size="xs" />
+                                    ) : (
+                                        <Globe className="h-3 w-3 shrink-0 text-figma-muted" />
+                                    )}
+                                    <span className="truncate text-figma-secondary">{bot.name}</span>
+                                </span>
+                                <span className="flex shrink-0 items-center gap-2 tabular-nums">
+                                    <span className="font-medium text-figma-primary">{bot.percentage}%</span>
+                                    <span className="text-figma-muted">{bot.count}</span>
+                                </span>
+                            </div>
+                        );
+                    }) : (
+                        <div className="flex min-h-[76px] items-center justify-center text-center text-figma-2xs text-figma-muted">
+                            No bot visits in this period
+                        </div>
                     )}
                 </div>
             )}

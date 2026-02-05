@@ -10,7 +10,7 @@ interface StatMetricProps {
     /** The main metric value (e.g. "42%", "1.2K") */
     value: string | number;
     /** Trend percentage change */
-    trend: number;
+    trend?: number;
     /** Optional suffix for the value (e.g. "%") */
     valueSuffix?: string;
     /** Additional classes for the container */
@@ -26,8 +26,8 @@ interface StatMetricProps {
  *   <StatMetric value={42} trend={5.2} valueSuffix="%" />
  */
 export function StatMetric({ value, trend, valueSuffix = '', className }: StatMetricProps) {
-    const trendSign = trend > 0 ? '+' : '';
-    const isPositive = trend > 0;
+    const trendSign = (trend ?? 0) > 0 ? '+' : '';
+    const isPositive = (trend ?? 0) > 0;
     const isNeutral = trend === 0;
 
     // Determine trend color: positive=green, negative=red, neutral=muted
@@ -43,9 +43,11 @@ export function StatMetric({ value, trend, valueSuffix = '', className }: StatMe
                 <span className="text-figma-lg font-bold text-figma-primary tabular-nums leading-none">
                     {value}{valueSuffix}
                 </span>
-                <span className={cn('text-figma-base font-semibold', trendColor)}>
-                    {isNeutral ? '—%' : `${trendSign}${trend}%`}
-                </span>
+                {trend !== undefined && (
+                    <span className={cn('text-figma-base font-semibold', trendColor)}>
+                        {isNeutral ? '—%' : `${trendSign}${trend}%`}
+                    </span>
+                )}
             </div>
         </div>
     );
@@ -173,7 +175,7 @@ export function MetricStatCard({
         >
             <CardContent className="p-5">
                 <CardLabel>{label}</CardLabel>
-                <StatMetric value={value} trend={trend ?? 0} />
+                <StatMetric value={value} trend={trend} />
                 {subtitle && <CardSubtitle>{subtitle}</CardSubtitle>}
             </CardContent>
         </Card>

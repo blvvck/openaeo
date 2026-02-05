@@ -10,6 +10,7 @@ import { Info } from 'lucide-react';
 import { MetricCard, MetricListScroller, CardLabel, CardSubtitle, CardDivider, StatMetric, Skeleton } from '@/components/shared';
 import { PlatformIcon, PLATFORMS } from '@/components/ui/platform-icon';
 import { CompanyAvatar } from '@/components/ui/company-avatar';
+import { CitationSiteGrid } from '@/components/citations/citation-site-grid';
 import {
   Tooltip,
   TooltipContent,
@@ -475,6 +476,7 @@ export function ShareOfAnswerCard({ data, isLoading, brandName = 'Your Brand', n
                       {uniqueCompetitors.map((comp) => (
                         <th
                           key={comp.name}
+                          title={comp.isYou ? `${brandName} (#${comp.rank})` : `${comp.name} (#${comp.rank})`}
                           className={cn(
                             "truncate border-b border-figma-border-light pb-1.5 px-0.5 text-center font-medium",
                             comp.isYou ? "text-figma-blue" : "text-figma-muted"
@@ -734,12 +736,6 @@ interface CitationRateCardProps {
 
 export function CitationRateCompetitorCard({ data, isLoading, noPeriodData = false }: CitationRateCardProps) {
   const isEmpty = !data;
-  const sourceGroups = [
-    { label: 'Owned', color: CITATION_COLORS.owned, percentage: data?.sources?.owned.percentage, sites: data?.sources?.owned.sites ?? [] },
-    { label: '3rd party', color: CITATION_COLORS.thirdParty, percentage: data?.sources?.thirdParty.percentage, sites: data?.sources?.thirdParty.sites ?? [] },
-    { label: 'Social', color: CITATION_COLORS.social, percentage: data?.sources?.social.percentage, sites: data?.sources?.social.sites ?? [] },
-  ];
-
   // Loading skeleton — matches: title, metric, subtitle, divider, donut + two columns (Owned/3rd party) with 4 cites each
   if (isLoading) {
     return (
@@ -818,35 +814,15 @@ export function CitationRateCompetitorCard({ data, isLoading, noPeriodData = fal
           <MiniSourceDonut sources={data?.sources} />
         </div>
 
-        {/* Three columns: Owned | Third-party | Social (scroll for Social) */}
         <div className="flex flex-1 min-w-0 flex-col">
-          <div className="overflow-x-auto scrollbar-hover">
-            <div className="flex min-w-max gap-3">
-              {sourceGroups.map((source) => (
-                <div key={source.label} className="w-[80px] shrink-0 flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
-                  <span className="text-figma-2xs font-medium text-figma-secondary">{source.label}</span>
-                  <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                    {isEmpty || noPeriodData ? '—' : (source.percentage ?? '—')}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
           {noPeriodData ? (
             <PeriodEmpty className="min-h-[100px] flex-1" />
           ) : (
-            <div className="overflow-x-auto scrollbar-hover">
-              <div className="flex gap-3">
-                {sourceGroups.map((source) => (
-                  <div key={source.label} className="w-[80px] shrink-0 space-y-0.5">
-                    {source.sites.length > 0 ? source.sites.slice(0, 4).map((site) => (
-                      <p key={site} className="text-figma-2xs text-figma-muted truncate">{site}</p>
-                    )) : <p className="text-figma-2xs text-figma-muted">No sources</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <CitationSiteGrid sources={data?.sources ?? {
+              owned: { percentage: 0, count: 0, sites: [] },
+              thirdParty: { percentage: 0, count: 0, sites: [] },
+              social: { percentage: 0, count: 0, sites: [] },
+            }} />
           )}
         </div>
       </div>

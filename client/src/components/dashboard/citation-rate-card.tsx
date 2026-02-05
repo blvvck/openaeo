@@ -2,6 +2,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { MetricCard } from '@/components/shared';
 import { StatMetric, HoverArrow, CardSubtitle, CardDivider } from '@/components/shared';
 import type { CategorizedCitationSources } from '@shared/types';
+import { CitationSiteGrid } from '@/components/citations/citation-site-grid';
 import { Info } from 'lucide-react';
 import {
     Tooltip,
@@ -47,6 +48,11 @@ export function CitationRateCard({
 }: CitationRateCardProps) {
     // Use default if sources is undefined
     const safeSource = sources || EMPTY_SOURCES;
+    const sourceGroups = [
+        { label: 'Own', color: CATEGORY_COLORS.owned },
+        { label: '3rd', color: CATEGORY_COLORS.thirdParty },
+        { label: 'Social', color: CATEGORY_COLORS.social },
+    ];
 
     // Build chart data from categorized sources
     const chartData = [
@@ -56,12 +62,6 @@ export function CitationRateCard({
     ].filter(d => d.percentage > 0);
 
     const hasData = !noPeriodData && chartData.length > 0;
-    const sourceGroups = [
-        { label: 'Own', color: CATEGORY_COLORS.owned, percentage: safeSource.owned.percentage, sites: safeSource.owned.sites },
-        { label: '3rd', color: CATEGORY_COLORS.thirdParty, percentage: safeSource.thirdParty.percentage, sites: safeSource.thirdParty.sites },
-        { label: 'Social', color: CATEGORY_COLORS.social, percentage: safeSource.social.percentage, sites: safeSource.social.sites },
-    ];
-
     return (
         <MetricCard onClick={onClick} className={className}>
             <HoverArrow />
@@ -136,25 +136,8 @@ export function CitationRateCard({
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 overflow-x-auto scrollbar-hover">
-                            <div className="flex min-w-max gap-4">
-                                {sourceGroups.map((source) => (
-                                    <div key={source.label} className="w-[72px] shrink-0">
-                                    <div className="flex items-center gap-1 pb-1 mb-1 border-b border-figma-border-light whitespace-nowrap">
-                                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
-                                        <span className="text-figma-2xs font-medium text-figma-secondary">{source.label}</span>
-                                        <span className="text-figma-2xs font-medium tabular-nums text-figma-muted ml-auto">
-                                            {hasData ? `${source.percentage}%` : '—%'}
-                                        </span>
-                                    </div>
-                                    <div className="space-y-0.5">
-                                        {source.sites.length > 0 ? source.sites.slice(0, 4).map((site) => (
-                                            <p key={site} className="text-figma-2xs text-figma-muted truncate">{site}</p>
-                                        )) : <p className="text-figma-2xs text-figma-muted">No sources</p>}
-                                    </div>
-                                </div>
-                                ))}
-                            </div>
+                        <div className="min-w-0 flex-1">
+                            <CitationSiteGrid sources={safeSource} />
                         </div>
                     )}
                 </div>

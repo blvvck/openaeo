@@ -26,7 +26,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { Lightbulb } from 'lucide-react';
-import { DEMO_CONFIG } from '@/config/app';
 
 // Shared components
 import { ContentCard } from '@/components/shared/dashboard-card';

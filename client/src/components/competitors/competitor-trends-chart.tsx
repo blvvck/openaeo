@@ -422,6 +422,7 @@ export function CompetitorTrendsChart({
                   }}
                   animationDuration={800}
                   animationEasing="ease-out"
+                  isAnimationActive={false}
                 />
               ))}
           </LineChart>
