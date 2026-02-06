@@ -2,6 +2,7 @@
 
 import { Router, Request, Response } from 'express';
 import { storage } from '../data';
+import { currentWorkspaceId } from '../context/workspace-context';
 import { getActiveBrandConfig } from '../services/brand-config';
 import {
   calculateVisibilityScore,
@@ -303,7 +304,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     const timeRange = (req.query.timeRange as VisibilityOverviewRequest['timeRange']) || '7d';
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
-    const workspaceId = req.query.workspaceId as string | undefined;
+    const workspaceId = currentWorkspaceId() ?? 'anonymous';
 
     // Validate time range
     const timeWindow = getTimeWindow(timeRange, startDate, endDate);
@@ -351,6 +352,11 @@ router.get('/overview', async (req: Request, res: Response) => {
     }
 
     const brandName = activeBrandConfig.name || 'Your Brand';
+    const brandAliases = Array.isArray(activeBrandConfig.aliases)
+      ? activeBrandConfig.aliases.filter((name): name is string => typeof name === 'string')
+      : [];
+    const brandTerms = [brandName, ...brandAliases].map(term => term.toLowerCase().trim());
+    const mentionsBrand = (text: string) => brandTerms.some(term => text.toLowerCase().includes(term));
 
     // Filter responses by time window
     const currentResponses = allResponses.filter(r =>
@@ -427,7 +433,7 @@ router.get('/overview', async (req: Request, res: Response) => {
 
     // Calculate citation rate (responses with citations / total responses)
     const responsesWithCitations = currentResponses.filter(r =>
-      citationAnalysis.citations.some(c => c.context.toLowerCase().includes(brandName.toLowerCase()))
+      citationAnalysis.citations.some(c => mentionsBrand(c.context))
     ).length;
     const currentCitationRate = currentResponses.length > 0
       ? Math.round((responsesWithCitations / currentResponses.length) * 100)
@@ -442,7 +448,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         )
       : { citations: [] };
     const previousResponsesWithCitations = previousResponses.filter(r =>
-      previousCitationAnalysis.citations.some(c => c.context.toLowerCase().includes(brandName.toLowerCase()))
+      previousCitationAnalysis.citations.some(c => mentionsBrand(c.context))
     ).length;
     const previousCitationRate = previousResponses.length > 0
       ? Math.round((previousResponsesWithCitations / previousResponses.length) * 100)

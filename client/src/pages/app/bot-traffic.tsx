@@ -1011,7 +1011,7 @@ export function BotTrafficPage() {
         <PageHeader
           title="Bot traffic"
           subtitle="AI crawler activity on your website"
-          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} />}
+          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />}
         />
         <ErrorState
           title="Couldn't load bot traffic data"
@@ -1163,6 +1163,7 @@ export function BotTrafficPage() {
             <TimeRangeSelector
               value={range}
               onChange={handleTimeRangeChange}
+              presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']}
               open={dateFilterOpen}
               onOpenChange={setDateFilterOpen}
             />

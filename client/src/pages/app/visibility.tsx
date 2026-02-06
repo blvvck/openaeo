@@ -34,6 +34,7 @@ import {
   useTimeRange,
   type TimeRange,
 } from '@/components/charts/time-range-selector';
+import { timeRangeQuery } from '@/lib/time-range-query';
 
 // Feature Components
 import {
@@ -102,11 +103,11 @@ function emptyVisibilityOverview(): VisibilityOverviewResponse {
   };
 }
 
-function useVisibilityOverview(timeRange: TimeRangePreset) {
+function useVisibilityOverview(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<VisibilityOverviewResponse>({
-    queryKey: ['visibility', 'overview', timeRange],
+    queryKey: ['visibility', 'overview', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/visibility/overview?timeRange=${timeRange}`);
+      const res = await fetch(`/api/visibility/overview?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (res.status === 404) return emptyVisibilityOverview();
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
@@ -137,13 +138,23 @@ function getIntervalLabel(interval: 'day' | 'week' | 'month'): string {
   }
 }
 
-function useVisibilityTrends(timeRange: TimeRangePreset, brandName: string) {
-  const interval = getIntervalForTimeRange(timeRange);
+function getIntervalForRange(timeRange: TimeRangePreset, range?: TimeRange): 'day' | 'week' | 'month' {
+  if (range && (range.preset === 'custom' || range.preset === 'all')) {
+    const days = (range.to.getTime() - range.from.getTime()) / 86_400_000;
+    if (days <= 14) return 'day';
+    if (days <= 90) return 'week';
+    return 'month';
+  }
+  return getIntervalForTimeRange(timeRange);
+}
+
+function useVisibilityTrends(timeRange: TimeRangePreset, brandName: string, range?: TimeRange) {
+  const interval = getIntervalForRange(timeRange, range);
 
   return useQuery<TrendsResponse>({
-    queryKey: ['visibility', 'trends', timeRange, brandName, interval],
+    queryKey: ['visibility', 'trends', timeRange, timeRangeQuery(range), brandName, interval],
     queryFn: async () => {
-      const res = await fetch(`/api/metrics/trends?timeRange=${timeRange}&interval=${interval}&brand=${encodeURIComponent(brandName)}`);
+      const res = await fetch(`/api/metrics/trends?timeRange=${timeRange}&interval=${interval}&brand=${encodeURIComponent(brandName)}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load trend data');
@@ -156,11 +167,11 @@ function useVisibilityTrends(timeRange: TimeRangePreset, brandName: string) {
   });
 }
 
-function useCompareData(timeRange: TimeRangePreset, brandName: string) {
+function useCompareData(timeRange: TimeRangePreset, brandName: string, range?: TimeRange) {
   return useQuery<CompareResponse>({
-    queryKey: ['metrics', 'compare', timeRange, brandName],
+    queryKey: ['metrics', 'compare', timeRange, timeRangeQuery(range), brandName],
     queryFn: async () => {
-      const res = await fetch(`/api/metrics/compare?brand=${encodeURIComponent(brandName)}&timeRange=${timeRange}`);
+      const res = await fetch(`/api/metrics/compare?brand=${encodeURIComponent(brandName)}&timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load comparison data');
@@ -174,11 +185,11 @@ function useCompareData(timeRange: TimeRangePreset, brandName: string) {
 }
 
 /** Fetch competitor rankings from dashboard endpoint */
-function useCompetitorRankings(timeRange: TimeRangePreset) {
+function useCompetitorRankings(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<{ rank: number | null; total: number }>({
-    queryKey: ['dashboard', 'competitors', timeRange],
+    queryKey: ['dashboard', 'competitors', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard?range=${timeRange}`);
+      const res = await fetch(`/api/dashboard?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) return { rank: null, total: 0 };
       const data = await res.json();
       const you = data.competitors?.find((c: { isYou?: boolean }) => c.isYou);
@@ -699,9 +710,8 @@ export function VisibilityPage() {
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const timeRangePreset = range.preset as TimeRangePreset;
 
-  // Get initial tab from URL or default to 'overview'
   const urlParams = new URLSearchParams(search);
-  const initialTab = urlParams.get('tab') || 'overview';
+  const initialTab = urlParams.get('platform') ? 'platform' : urlParams.get('tab') || 'overview';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const brandName = useActiveWorkspaceName();
@@ -713,7 +723,7 @@ export function VisibilityPage() {
     isFetching: overviewFetching,
     error: overviewError,
     refetch: refetchOverview,
-  } = useVisibilityOverview(timeRangePreset);
+  } = useVisibilityOverview(timeRangePreset, range);
 
   const {
     data: trendsData,
@@ -721,14 +731,14 @@ export function VisibilityPage() {
     isFetching: trendsFetching,
     error: trendsError,
     refetch: refetchTrends,
-  } = useVisibilityTrends(timeRangePreset, brandName);
+  } = useVisibilityTrends(timeRangePreset, brandName, range);
 
   const {
     data: compareData,
-  } = useCompareData(timeRangePreset, brandName);
+  } = useCompareData(timeRangePreset, brandName, range);
 
   // Fetch full competitor rankings (same data as dashboard)
-  const { data: rankData } = useCompetitorRankings(timeRangePreset);
+  const { data: rankData } = useCompetitorRankings(timeRangePreset, range);
   const rank = rankData?.rank ?? null;
   const competitorCount = rankData?.total ?? 0;
 
@@ -778,7 +788,7 @@ export function VisibilityPage() {
         <PageHeader
           title="Visibility"
           subtitle="Track your brand's presence across AI platforms"
-          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} />}
+          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />}
         />
         <ErrorState
           title="Couldn't load visibility data"
@@ -809,6 +819,7 @@ export function VisibilityPage() {
             <TimeRangeSelector
               value={range}
               onChange={handleTimeRangeChange}
+              presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']}
               open={dateFilterOpen}
               onOpenChange={setDateFilterOpen}
             />

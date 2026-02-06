@@ -449,11 +449,12 @@ function CitationsTable({
           />
           <div className="space-y-0">
             {citations.map((citation) => (
-              <div
+              <button
+                type="button"
                 key={citation.id}
                 onClick={() => onRowClick(citation)}
                 className={cn(
-                  'grid gap-3 items-center py-2.5 px-2',
+                  'grid gap-3 items-center py-2.5 px-2 w-full text-left',
                   'border-b border-figma-border-light last:border-0',
                   'hover:bg-figma-hover cursor-pointer transition-colors',
                   tableGrid
@@ -520,7 +521,7 @@ function CitationsTable({
                 <div className="flex justify-end">
                   <SentimentBadge sentiment={citation.sentiment} />
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -674,12 +675,13 @@ function CitationDetailDrawer({
 
               <div className="space-y-2">
                 {citation.promptsCiting.map((prompt) => (
-                  <div
+                  <button
+                    type="button"
                     key={prompt.id}
-                    className="flex items-center gap-3 py-2 px-3 bg-figma-hover rounded-lg cursor-pointer hover:bg-figma-border-light transition-colors"
+                    className="flex w-full items-center gap-3 py-2 px-3 bg-figma-hover rounded-lg text-left hover:bg-figma-border-light transition-colors"
                     onClick={() => {
                       onClose();
-                      setTimeout(() => onNavigateToPrompt(prompt.id), 100);
+                      setTimeout(() => onNavigateToPrompt(prompt.text), 100);
                     }}
                   >
                     <span className="text-figma-sm text-figma-primary flex-1 truncate">
@@ -688,7 +690,7 @@ function CitationDetailDrawer({
                     <span className="text-figma-xs text-figma-muted tabular-nums shrink-0">
                       {prompt.citationCount} cites
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
 
@@ -804,7 +806,7 @@ export function CitationsPage() {
     isFetching: overviewFetching,
     error: overviewError,
     refetch: refetchOverview,
-  } = useCitationsOverview(timeRangePreset);
+  } = useCitationsOverview(timeRangePreset, range);
 
   const {
     data: citationsData,
@@ -812,6 +814,7 @@ export function CitationsPage() {
     isFetching: citationsFetching,
   } = useCitations({
     timeRange: timeRangePreset,
+    range,
     type: activeTab !== 'all' ? activeTab : undefined,
     platform: selectedPlatform || undefined,
     sentiment: selectedSentiment || undefined,
@@ -875,8 +878,8 @@ export function CitationsPage() {
     refetchOverview();
   };
 
-  const handleNavigateToPrompt = (promptId: string) => {
-    navigate(`/app/prompts?search=${promptId}`);
+  const handleNavigateToPrompt = (promptText: string) => {
+    navigate(`/app/prompts?search=${encodeURIComponent(promptText)}`);
   };
 
   // Computed
@@ -890,7 +893,7 @@ export function CitationsPage() {
         <PageHeader
           title="Citations"
           subtitle="See what AI platforms cite about your brand"
-          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} />}
+          action={<TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />}
         />
         <ErrorState
           title="Couldn't load citations data"
@@ -915,7 +918,7 @@ export function CitationsPage() {
                 <span className="text-figma-xs">Updating...</span>
               </div>
             )}
-            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />
           </div>
         }
       />

@@ -204,7 +204,7 @@ function FunnelCoverageCard({
               onClick={() => onStageClick(stage.id)}
               className={cn(
                 'flex flex-col items-center gap-2 p-3 rounded-lg cursor-pointer transition-all',
-                isCurrentTab && 'bg-figma-blue-light ring-2 ring-figma-blue/30',
+                isCurrentTab && 'bg-figma-blue-light ring-2 ring-[#2462EB33]',
                 !isCurrentTab && 'hover:bg-figma-hover'
               )}
             >
@@ -736,7 +736,7 @@ function PromptDetailDrawer({
                     key={comp.id}
                     className={cn(
                       'flex items-center gap-3 py-2 px-3 rounded-lg',
-                      comp.isYou && 'bg-figma-blue-light ring-1 ring-figma-blue/30'
+                      comp.isYou && 'bg-figma-blue-light ring-1 ring-[#2462EB33]'
                     )}
                   >
                     {comp.isYou && <Star className="w-3.5 h-3.5 text-figma-blue shrink-0" />}
@@ -905,7 +905,7 @@ export function PromptsPage() {
     isFetching: funnelFetching,
     error: funnelError,
     refetch: refetchFunnel,
-  } = useFunnelCoverage(timeRangePreset);
+  } = useFunnelCoverage(timeRangePreset, range);
 
   const {
     data: promptsData,
@@ -913,6 +913,7 @@ export function PromptsPage() {
     isFetching: promptsFetching,
   } = usePrompts({
     timeRange: timeRangePreset,
+    range,
     stage: activeTab !== 'all' ? activeTab : undefined,
     topic: selectedTopic || undefined,
     search: searchQuery || undefined,
@@ -923,7 +924,7 @@ export function PromptsPage() {
   const {
     data: trendingData,
     isLoading: trendingLoading,
-  } = useTrendingPrompts(timeRangePreset);
+  } = useTrendingPrompts(timeRangePreset, range);
 
   const { data: topicsData } = useTopics();
 
@@ -1102,7 +1103,7 @@ export function PromptsPage() {
                 disabled={saveTrackingFrequency.isPending || runPromptsNow.isPending}
                 onChange={handleTrackingFrequencyChange}
               />
-              <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+              <TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />
             </div>
           )}
         />
@@ -1138,7 +1139,7 @@ export function PromptsPage() {
               disabled={saveTrackingFrequency.isPending || runPromptsNow.isPending}
               onChange={handleTrackingFrequencyChange}
             />
-            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} />
+            <TimeRangeSelector value={range} onChange={handleTimeRangeChange} presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']} />
           </div>
         }
       />

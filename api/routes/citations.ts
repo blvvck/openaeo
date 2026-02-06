@@ -75,17 +75,25 @@ function setCache<T>(key: string, data: T): void {
 // HELPERS
 // =============================================================================
 
-function getTimeWindow(timeRange: string): { start: Date; end: Date } {
+function getTimeWindow(timeRange: string, startDate?: unknown, endDate?: unknown): { start: Date; end: Date; error?: string } {
   const now = new Date();
-  const end = now;
+  const end = endDate ? new Date(String(endDate)) : now;
   let start: Date;
 
-  const match = timeRange.match(/^(\d+)d$/);
-  if (match) {
-    const days = parseInt(match[1]);
-    start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  if (timeRange === 'all') {
+    start = new Date(2020, 0, 1);
+  } else if (timeRange === 'custom') {
+    if (!startDate || !endDate) return { start: now, end: now, error: 'INVALID_TIME_RANGE' };
+    start = new Date(String(startDate));
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+      return { start: now, end: now, error: 'INVALID_TIME_RANGE' };
+    }
+    return { start, end };
   } else {
-    start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const match = timeRange.match(/^(\d+)d$/);
+    start = match
+      ? new Date(end.getTime() - parseInt(match[1], 10) * 24 * 60 * 60 * 1000)
+      : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
   }
 
   return { start, end };
@@ -166,7 +174,7 @@ interface ParsedCitation {
 router.get('/overview', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '30d';
-    const cacheKey = workspaceCacheKey('citations', currentWorkspaceId() ?? 'unscoped', 'overview', timeRange);
+    const cacheKey = workspaceCacheKey('citations', currentWorkspaceId() ?? 'unscoped', 'overview', timeRange, String(req.query.startDate ?? ''), String(req.query.endDate ?? ''));
 
     // Check cache
     const cached = getCached<CitationsOverviewResponse>(cacheKey);
@@ -174,7 +182,8 @@ router.get('/overview', async (req: Request, res: Response) => {
       return res.json(cached);
     }
 
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
 
     // Get data
@@ -432,7 +441,8 @@ router.get('/', async (req: Request, res: Response) => {
     const limitNum = Math.min(parseInt(limit as string) || 25, 100);
     const offsetNum = parseInt(offset as string) || 0;
 
-    const { start, end } = getTimeWindow(timeRange as string);
+    const { start, end, error } = getTimeWindow(timeRange as string, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
 
     // Get data
@@ -617,7 +627,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   try {
     const citationId = req.params.id; // This is the domain
     const timeRange = (req.query.timeRange as string) || '30d';
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
 
     // Get data

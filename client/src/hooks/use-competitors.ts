@@ -18,6 +18,8 @@ import type {
   CompetitorMetricsResponse,
   TimeRangePreset,
 } from '@shared/types';
+import { timeRangeQuery } from '@/lib/time-range-query';
+import type { TimeRange } from '@/components/charts/time-range-selector';
 
 // =============================================================================
 // API Hooks
@@ -30,11 +32,11 @@ import type {
  * - competitors: Array of CompetitorDetail with shareOfAnswer, highIntent, topPrompt
  * - insight: AI-generated insight text
  */
-export function useCompetitors(timeRange: TimeRangePreset) {
+export function useCompetitors(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<CompetitorsResponse>({
-    queryKey: ['competitors', timeRange],
+    queryKey: ['competitors', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/competitors?timeRange=${timeRange}`);
+      const res = await fetch(`/api/competitors?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load competitors');
@@ -50,11 +52,11 @@ export function useCompetitors(timeRange: TimeRangePreset) {
  * Fetch per-platform competitor rankings
  * Returns CompetitorsByPlatformResponse with rankings for each AI platform
  */
-export function useCompetitorsByPlatform(timeRange: TimeRangePreset) {
+export function useCompetitorsByPlatform(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<CompetitorsByPlatformResponse>({
-    queryKey: ['competitors', 'by-platform', timeRange],
+    queryKey: ['competitors', 'by-platform', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/competitors/by-platform?timeRange=${timeRange}`);
+      const res = await fetch(`/api/competitors/by-platform?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load platform breakdown');
@@ -74,14 +76,14 @@ export function useCompetitorsByPlatform(timeRange: TimeRangePreset) {
  * - metrics: Array of metric comparisons
  * - platformComparison: Per-platform score deltas
  */
-export function useCompetitorCompare(competitorId: string | null, timeRange: TimeRangePreset) {
+export function useCompetitorCompare(competitorId: string | null, timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<CompetitorCompareResponse>({
-    queryKey: ['competitors', 'compare', competitorId, timeRange],
+    queryKey: ['competitors', 'compare', competitorId, timeRange, timeRangeQuery(range)],
     queryFn: async () => {
       if (!competitorId) {
         throw new Error('No competitor selected');
       }
-      const res = await fetch(`/api/competitors/${encodeURIComponent(competitorId)}/compare?timeRange=${timeRange}`);
+      const res = await fetch(`/api/competitors/${encodeURIComponent(competitorId)}/compare?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load comparison');
@@ -170,11 +172,11 @@ export function useDeleteCompetitor() {
  * - citationRate: How often your content is cited
  * - competitivePressure: Net wins/losses vs competitors
  */
-export function useCompetitorMetrics(range: TimeRangePreset) {
+export function useCompetitorMetrics(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<CompetitorMetricsResponse>({
-    queryKey: ['competitor-metrics', range],
+    queryKey: ['competitor-metrics', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/competitors/metrics?range=${range}`);
+      const res = await fetch(`/api/competitors/metrics?range=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load competitor metrics');
@@ -220,11 +222,11 @@ export interface CompetitorTrendsResponse {
  * Returns points grouped by date with visibility/citations/position for each competitor
  * Used by CompetitorTrendsChart
  */
-export function useCompetitorTrends(timeRange: TimeRangePreset) {
+export function useCompetitorTrends(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<CompetitorTrendsResponse>({
-    queryKey: ['competitors', 'trends', timeRange],
+    queryKey: ['competitors', 'trends', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await fetch(`/api/competitors/trends?timeRange=${timeRange}`);
+      const res = await fetch(`/api/competitors/trends?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) {
         const error = await res.json().catch(() => ({}));
         throw new Error(error.message || 'Failed to load competitor trends');

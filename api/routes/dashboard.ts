@@ -1085,7 +1085,7 @@ router.get('/', async (req: Request, res: Response) => {
     const timeRange = (req.query.timeRange as DashboardRequest['timeRange']) || '7d';
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
-    const workspaceId = req.query.workspaceId as string | undefined;
+    const workspaceId = currentWorkspaceId() ?? 'anonymous';
 
     // Validate custom time range
     if (timeRange === 'custom' && (!startDate || !endDate)) {

@@ -131,7 +131,7 @@ export function TimeRangeSelector({
   onOpenChange,
   className,
   variant = 'dropdown',
-  presets = ['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom'],
+  presets = ['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d'],
 }: TimeRangeSelectorProps) {
   const [internalValue, setInternalValue] = useState<TimeRange>(
     value || getDefaultRange()

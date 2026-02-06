@@ -109,19 +109,19 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
     isFetching: competitorsFetching,
     error: competitorsError,
     refetch: refetchCompetitors,
-  } = useCompetitors(timeRangePreset);
+  } = useCompetitors(timeRangePreset, range);
 
   const {
     data: platformData,
     isLoading: platformLoading,
     isFetching: platformFetching,
-  } = useCompetitorsByPlatform(timeRangePreset);
+  } = useCompetitorsByPlatform(timeRangePreset, range);
 
   // Metrics for the 5 metric cards
   const {
     data: metricsData,
     isLoading: metricsLoading,
-  } = useCompetitorMetrics(timeRangePreset);
+  } = useCompetitorMetrics(timeRangePreset, range);
 
   // Default to first competitor (the leader) for comparison
   const compareId = selectedCompetitorId || competitorsData?.competitors?.find(c => !c.isYou)?.id || null;
@@ -129,13 +129,13 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
   const {
     data: compareData,
     isLoading: compareLoading,
-  } = useCompetitorCompare(compareId, timeRangePreset);
+  } = useCompetitorCompare(compareId, timeRangePreset, range);
 
   // Trends data for chart (real data from API)
   const {
     data: trendsData,
     isLoading: trendsLoading,
-  } = useCompetitorTrends(timeRangePreset);
+  } = useCompetitorTrends(timeRangePreset, range);
 
   useEffect(() => {
     if (!initialCompetitorId || !competitorsData || handledInitialCompetitorId === initialCompetitorId) return;
@@ -226,7 +226,7 @@ function OverviewTab({ range, onOpenDateFilter, initialCompetitorId, mockEmptyPe
 
       {/* Info banner for empty state */}
       {!hasTrackedData && !noResultsForRange && (
-        <div className="bg-figma-blue-light border border-figma-blue/20 rounded-lg px-4 py-3 mb-8">
+        <div className="bg-figma-blue-light border border-[#2462EB33] rounded-lg px-4 py-3 mb-8">
           <p className="text-figma-sm text-figma-primary">
             <span className="font-medium">No ranking data yet.</span>{' '}
             <a href="/app/prompts" className="text-figma-blue hover:underline">Add prompts</a> to start tracking how you compare to competitors.
@@ -502,6 +502,7 @@ export function CompetitorsPage() {
               <TimeRangeSelector
                 value={range}
                 onChange={handleTimeRangeChange}
+                presets={['1d', '3d', '7d', '14d', '30d', '60d', '90d', '365d', 'all', 'custom']}
                 open={dateFilterOpen}
                 onOpenChange={setDateFilterOpen}
               />

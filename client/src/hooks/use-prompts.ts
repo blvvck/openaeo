@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { workspaceFetch } from '@/lib/workspace-query';
+import { timeRangeParams, timeRangeQuery } from '@/lib/time-range-query';
+import type { TimeRange } from '@/components/charts/time-range-selector';
 import type {
   FunnelCoverageResponse,
   PromptsResponse,
@@ -53,11 +55,11 @@ export function useRunPromptsNow() {
   });
 }
 
-export function useFunnelCoverage(timeRange: TimeRangePreset) {
+export function useFunnelCoverage(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<FunnelCoverageResponse>({
-    queryKey: ['discovery', 'funnel-coverage', timeRange],
+    queryKey: ['discovery', 'funnel-coverage', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await workspaceFetch(`/api/discovery/overview?timeRange=${timeRange}`);
+      const res = await workspaceFetch(`/api/discovery/overview?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) throw new Error('Failed to load funnel coverage');
       return res.json();
     },
@@ -71,6 +73,7 @@ export function useFunnelCoverage(timeRange: TimeRangePreset) {
 
 export function usePrompts(params: {
   timeRange: TimeRangePreset;
+  range?: TimeRange;
   stage?: BuyerJourneyStage;
   topic?: string;
   search?: string;
@@ -80,11 +83,14 @@ export function usePrompts(params: {
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
 }) {
-  const { timeRange, stage, topic, search, sentiment, limit = 25, offset = 0, sortBy, sortDir } = params;
+  const { timeRange, range, stage, topic, search, sentiment, limit = 25, offset = 0, sortBy, sortDir } = params;
   return useQuery<PromptsResponse>({
-    queryKey: ['discovery', 'prompts', timeRange, stage, topic, search, sentiment, limit, offset, sortBy, sortDir],
+    queryKey: ['discovery', 'prompts', timeRange, timeRangeQuery(range), stage, topic, search, sentiment, limit, offset, sortBy, sortDir],
     queryFn: async () => {
-      const queryParams = new URLSearchParams({ timeRange, limit: String(limit), offset: String(offset) });
+      const queryParams = timeRangeParams(range);
+      queryParams.set('timeRange', timeRange);
+      queryParams.set('limit', String(limit));
+      queryParams.set('offset', String(offset));
       if (stage) queryParams.set('stage', stage);
       if (topic) queryParams.set('topic', topic);
       if (search) queryParams.set('search', search);
@@ -103,11 +109,11 @@ export function usePrompts(params: {
   });
 }
 
-export function useTrendingPrompts(timeRange: TimeRangePreset) {
+export function useTrendingPrompts(timeRange: TimeRangePreset, range?: TimeRange) {
   return useQuery<TrendingPromptsResponse>({
-    queryKey: ['discovery', 'trending', timeRange],
+    queryKey: ['discovery', 'trending', timeRange, timeRangeQuery(range)],
     queryFn: async () => {
-      const res = await workspaceFetch(`/api/discovery/trending?timeRange=${timeRange}`);
+      const res = await workspaceFetch(`/api/discovery/trending?timeRange=${timeRange}${timeRangeQuery(range)}`);
       if (!res.ok) throw new Error('Failed to load trending prompts');
       return res.json();
     },
