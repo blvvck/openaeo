@@ -13,30 +13,37 @@ OpenAEO is open-source software for tracking how brands appear in AI-generated a
 
 ## Screenshots
 
-The development server includes a read-only preview with local sample data. Start the app with `npm run dev`, then add `?mock=demo` to any supported page URL:
-
-- Dashboard: `http://localhost:3000/app/dashboard?mock=demo`
-- Competitors: `http://localhost:3000/app/competitors?mock=demo`
-- Bot traffic: `http://localhost:3000/app/bot-traffic?mock=demo`
-- Citations: `http://localhost:3000/app/citations?mock=demo`
-
-The preview is enabled only in development and does not write to your workspace.
+After signing in, open the workspace switcher and choose Demo to explore the sample data. Demo is read-only and separate from your working workspace.
 
 ### Dashboard
 
 ![OpenAEO dashboard](docs/screenshots/dashboard.png)
 
+See visibility score, top prompts, citation rate, bot visits, competitor rankings, citation sources, and sentiment in one view.
+
+### Visibility
+
+![OpenAEO visibility overview](docs/screenshots/visibility.png)
+
+Break down visibility by mentions, citation rate, sentiment, and platform diversity, with the prompts driving the score below.
+
 ### Competitors
 
 ![OpenAEO competitors](docs/screenshots/competitors.png)
+
+Compare rank, answer share, high intent coverage, citation rate, and score trends across competing brands.
 
 ### Bot traffic
 
 ![OpenAEO bot traffic](docs/screenshots/bot-traffic.png)
 
+Track crawler totals, recent activity, daily traffic, bot mix, and the pages AI bots visit.
+
 ### Citations
 
-![OpenAEO citations](docs/screenshots/citations.png)
+![OpenAEO third-party citations](docs/screenshots/citations.png)
+
+Filter third-party sources by platform and sentiment, then compare citation counts, trends, and sentiment.
 
 ## Stack
 
