@@ -312,10 +312,11 @@ export function compareCompetitors(
   // Import visibility calculator functions
   const calculateEntityMetrics = (
     responses: Array<{ text: string; platform: string; brandMentioned: boolean }>,
-    entityName: string
+    entityName: string,
+    isBrand = false
   ) => {
     const entityResponses = responses.filter(r =>
-      r.text.toLowerCase().includes(entityName.toLowerCase())
+      (isBrand && r.brandMentioned) || r.text.toLowerCase().includes(entityName.toLowerCase())
     );
 
     if (entityResponses.length === 0) {
@@ -329,10 +330,16 @@ export function compareCompetitors(
 
     const mentionRate = entityResponses.length / responses.length;
 
-    // Calculate average position (simplified - first mention position)
+    const terms = isBrand
+      ? [entityName.toLowerCase(), entityName.toLowerCase().split(/\s+/)[0]]
+      : [entityName.toLowerCase()];
     const positions = entityResponses.map(r => {
-      const index = r.text.toLowerCase().indexOf(entityName.toLowerCase());
-      return index >= 0 ? index / r.text.length : 1;
+      const lower = r.text.toLowerCase();
+      const index = Math.min(...terms.map(term => {
+        const found = lower.indexOf(term);
+        return found >= 0 ? found : Number.MAX_SAFE_INTEGER;
+      }));
+      return index === Number.MAX_SAFE_INTEGER ? 0.5 : index / r.text.length;
     });
     const avgPosition = 1 - (positions.reduce((s, p) => s + p, 0) / positions.length);
 
@@ -348,7 +355,7 @@ export function compareCompetitors(
   };
 
   // Calculate brand metrics
-  const brandMetrics = calculateEntityMetrics(responses, brandName);
+  const brandMetrics = calculateEntityMetrics(responses, brandName, true);
 
   // Calculate competitor metrics
   const competitorMetrics = competitors.map(name => ({

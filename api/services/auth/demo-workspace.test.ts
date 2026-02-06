@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoSlug, isDemoSlugConflict, isDemoWorkspace, isDemoWrite, isOwnedDemoWorkspace } from "./demo-workspace";
+import { demoMentionMix, demoSlug, isDemoSlugConflict, isDemoWorkspace, isDemoWrite, isOwnedDemoWorkspace } from "./demo-workspace";
 
 describe("demo workspace rules", () => {
   it("derives a stable account-scoped slug", () => {
@@ -32,5 +32,40 @@ describe("demo workspace rules", () => {
     expect(isDemoSlugConflict({ code: "P2002", meta: { target: ["slug"] } })).toBe(true);
     expect(isDemoSlugConflict({ code: "P2002", meta: { target: ["name"] } })).toBe(false);
     expect(isDemoSlugConflict({ code: "P2025" })).toBe(false);
+  });
+});
+
+describe("demo mention mix", () => {
+  const rivals = ["Northstar CRM", "Orbit Sales", "Pipedrive"];
+
+  it("varies brand mentions across days", () => {
+    const mentioned = Array.from({ length: 14 }, (_, day) => demoMentionMix(day, 0).brandMentioned);
+    expect(mentioned.some(Boolean)).toBe(true);
+    expect(mentioned.some((value) => !value)).toBe(true);
+  });
+
+  it("varies each competitor's mentions across days", () => {
+    for (const rival of rivals) {
+      const mentioned = Array.from({ length: 14 }, (_, day) => demoMentionMix(day, 0).rivals.includes(rival));
+      expect(mentioned.some(Boolean)).toBe(true);
+      expect(mentioned.some((value) => !value)).toBe(true);
+    }
+  });
+
+  it("gives competitors different overall mention rates", () => {
+    const rates = rivals.map((rival) => {
+      const mixes = Array.from({ length: 30 }, (_, day) => Array.from({ length: 8 }, (_, index) => demoMentionMix(day, index))).flat();
+      return mixes.filter(({ rivals: mentioned }) => mentioned.includes(rival)).length / mixes.length;
+    });
+    expect(Math.max(...rates) - Math.min(...rates)).toBeGreaterThan(0.1);
+  });
+
+  it("produces several distinct mention patterns", () => {
+    const patterns = new Set(
+      Array.from({ length: 30 }, (_, day) => Array.from({ length: 8 }, (_, index) => demoMentionMix(day, index)))
+        .flat()
+        .map(({ brandMentioned, rivals: mentioned }) => `${brandMentioned}:${mentioned.join('|')}`),
+    );
+    expect(patterns.size).toBeGreaterThan(4);
   });
 });

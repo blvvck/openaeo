@@ -1,14 +1,33 @@
 import { createHash } from "node:crypto";
 import type { Prisma, workspaces } from "@prisma/client";
 
-const DEMO_SEED_VERSION = 8;
+const DEMO_SEED_VERSION = 12;
+const DEMO_RIVALS = ["Northstar CRM", "Orbit Sales", "Pipedrive"] as const;
 const BOT_PATHS = ["/", "/blog/ai-guide", "/docs/api", "/pricing", "/features", "/blog/case-study"];
 const DEMO_BOTS = [
-  "GPTBot", "ChatGPT-User", "ClaudeBot", "PerplexityBot", "Google-Extended", "cohere-ai", "CCBot",
+  "GPTBot", "ChatGPT-User", "ClaudeBot", "PerplexityBot", "Google-Extended", "Cohere-ai", "CCBot",
   "Googlebot", "bingbot", "DuckDuckBot", "YandexBot", "Baiduspider",
   "Twitterbot", "facebookexternalhit", "LinkedInBot", "Slackbot",
 ] as const;
 const DEMO_JOURNEY_STAGES = ["comparing", "solution-seeking", "problem-aware", "buying"] as const;
+
+export function demoMentionMix(daysAgo: number, index: number) {
+  const day = daysAgo % 14;
+  const brandMentioned = (day * 3 + index * 7) % 10 < 7 + (day % 3);
+  const rivals = DEMO_RIVALS.filter((_, rivalIndex) =>
+    (day * 7 + index * 3 + rivalIndex * 3) % 11 < [7, 5, 4][rivalIndex] + ((day + rivalIndex * 2) % 3),
+  );
+  return { brandMentioned, rivals: [...rivals] };
+}
+
+function demoResponseText(topic: string, brandMentioned: boolean, before: string[], after: string[]) {
+  const parts = [
+    before.length ? `${before.join(', ')} are mentioned before Acme for ${topic}.` : '',
+    brandMentioned ? `Acme is an option for ${topic}.` : '',
+    after.length ? `${after.join(', ')} are also compared.` : '',
+  ];
+  return parts.filter(Boolean).join(' ') || `Reviewers compare several options for ${topic}.`;
+}
 
 function demoBotVisits(workspaceId: string, now: Date) {
   const rows = [];
@@ -34,13 +53,73 @@ function demoBotVisits(workspaceId: string, now: Date) {
   return rows;
 }
 
+async function syncDemoMetrics(client: Prisma.TransactionClient, workspaceId: string): Promise<void> {
+  const [promptCount, sourceCount, responseCount, mentionCount] = await Promise.all([
+    client.prompts.count({ where: { workspace_id: workspaceId } }),
+    client.sources.count({ where: { workspace_id: workspaceId } }),
+    client.responses.count({ where: { workspace_id: workspaceId } }),
+    client.responses.count({ where: { workspace_id: workspaceId, brand_mentioned: true } }),
+  ]);
+  const mentionRate = responseCount > 0 ? Math.round((mentionCount / responseCount) * 1000) / 1000 : 0;
+  await client.analytics.updateMany({
+    where: { workspace_id: workspaceId },
+    data: {
+      total_prompts: promptCount,
+      total_sources: sourceCount,
+      total_domains: sourceCount,
+      brand_mention_rate: mentionRate,
+    },
+  });
+  const [competitorRows, responseRows] = await Promise.all([
+    client.competitors.findMany({ where: { workspace_id: workspaceId }, select: { id: true, name: true } }),
+    client.responses.findMany({ where: { workspace_id: workspaceId }, select: { text: true, competitors_mentioned: true } }),
+  ]);
+  for (const competitor of competitorRows) {
+    const mentions = responseRows.filter(({ text, competitors_mentioned }) =>
+      (Array.isArray(competitors_mentioned) && competitors_mentioned.includes(competitor.name)) ||
+      text.toLowerCase().includes(competitor.name.toLowerCase())
+    ).length;
+    const score = responseRows.length > 0 ? Math.round((mentions / responseRows.length) * 1000) / 10 : 0;
+    await client.competitors.update({
+      where: { id: competitor.id },
+      data: { initial_score: score, mention_count: mentions },
+    });
+  }
+}
+
+async function attachRecentSources(client: Prisma.TransactionClient, workspaceId: string): Promise<void> {
+  const marker = "Also compare CRM coverage";
+  const marked = await client.responses.findMany({
+    where: { workspace_id: workspaceId, text: { contains: marker } },
+    select: { id: true, text: true },
+  });
+  for (const { id, text } of marked) {
+    await client.responses.update({ where: { id }, data: { text: text.split(marker)[0].trim() } });
+  }
+  const addedSources = `${marker} from techcrunch.com/reviews/acme-crm, getapp.com/customer-management-software/acme, trustradius.com/products/acme/reviews, gartner.com/reviews/acme-crm, pcmag.com/reviews/acme-crm, and saasworthy.com/product/acme-crm.`;
+  const latestResponse = await client.responses.findFirst({
+    where: { workspace_id: workspaceId },
+    orderBy: { created_at: "desc" },
+  });
+  if (latestResponse) {
+    await client.responses.update({
+      where: { id: latestResponse.id },
+      data: { text: `${latestResponse.text} ${addedSources}` },
+    });
+  }
+}
+
 async function ensureDemoHistory(client: Prisma.TransactionClient, workspaceId: string): Promise<void> {
-  const [botVisitCount, response, sources] = await Promise.all([
+  const now = new Date();
+  const [botVisitCount, sources] = await Promise.all([
     client.bot_visits.count({ where: { workspace_id: workspaceId } }),
-    client.responses.findFirst({ where: { workspace_id: workspaceId }, orderBy: { created_at: "asc" } }),
     client.sources.findMany({ where: { workspace_id: workspaceId }, select: { domain: true } }),
   ]);
-  if (botVisitCount < 1000) await client.bot_visits.createMany({ data: demoBotVisits(workspaceId, new Date()) });
+  if (botVisitCount < 1000) await client.bot_visits.createMany({ data: demoBotVisits(workspaceId, now) });
+  await client.bot_visits.updateMany({
+    where: { workspace_id: workspaceId, bot_type: "cohere-ai" },
+    data: { bot_type: "Cohere-ai", user_agent: "Cohere-ai/1.0" },
+  });
   const knownDomains = new Set(sources.map(({ domain }) => domain));
   const extraSources = [
     ["techradar.com", "https://techradar.com/reviews/acme-crm", 13],
@@ -54,13 +133,11 @@ async function ensureDemoHistory(client: Prisma.TransactionClient, workspaceId: 
   await client.sources.createMany({
     data: extraSources
       .filter(([domain]) => !knownDomains.has(domain))
-      .map(([domain, url, count]) => ({ workspace_id: workspaceId, domain, url, citation_count: count, last_cited: new Date() })),
+      .map(([domain, url, count]) => ({ workspace_id: workspaceId, domain, url, citation_count: count, last_cited: now })),
   });
-  const addedSources = "Also compare CRM coverage from techcrunch.com/reviews/acme-crm, getapp.com/customer-management-software/acme, trustradius.com/products/acme/reviews, gartner.com/reviews/acme-crm, pcmag.com/reviews/acme-crm, and saasworthy.com/product/acme-crm.";
-  if (response && !response.text.includes("saasworthy.com/product/acme-crm")) {
-    await client.responses.update({ where: { id: response.id }, data: { text: `${response.text} ${addedSources}` } });
-  }
-  await seedTopicExamples(client, workspaceId, new Date());
+  await seedTopicExamples(client, workspaceId, now);
+  await attachRecentSources(client, workspaceId);
+  await syncDemoMetrics(client, workspaceId);
 }
 
 async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: string, now: Date): Promise<void> {
@@ -84,22 +161,25 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
     const prompt = crmPrompts[0];
     if (prompt && recentMentions < 6) {
       await client.responses.createMany({
-        data: Array.from({ length: 6 - recentMentions }, (_, index) => ({
-          workspace_id: workspaceId,
-          prompt_id: prompt.id,
-          platform: ["chatgpt", "claude", "perplexity"][index % 3],
-          text: "Acme is a leading CRM for small businesses and growing teams.",
-          brand_mentioned: true,
-          competitors_mentioned: ["Northstar CRM"],
-          sources: [],
-          created_at: new Date(now.getTime() - (index + 1) * 60 * 60 * 1000),
-        })),
+        data: Array.from({ length: 6 - recentMentions }, (_, index) => {
+          const mix = demoMentionMix(index, index);
+          return {
+            workspace_id: workspaceId,
+            prompt_id: prompt.id,
+            platform: ["chatgpt", "claude", "perplexity"][index % 3],
+            text: demoResponseText("CRM research", mix.brandMentioned, mix.rivals.slice(0, 1), mix.rivals.slice(1)),
+            brand_mentioned: mix.brandMentioned,
+            competitors_mentioned: mix.rivals,
+            sources: [],
+            created_at: new Date(now.getTime() - (index + 1) * 60 * 60 * 1000),
+          };
+        }),
       });
     }
     if (prompt) {
       for (const period of [
-        { fromDaysAgo: 7, toDaysAgo: 14, target: 4, firstDayAgo: 10 },
-        { fromDaysAgo: 30, toDaysAgo: 60, target: 3, firstDayAgo: 40 },
+        { fromDaysAgo: 7, toDaysAgo: 15, target: 6, firstDayAgo: 9, span: 6 },
+        { fromDaysAgo: 15, toDaysAgo: 30, target: 6, firstDayAgo: 17, span: 13 },
       ]) {
         const count = await client.responses.count({
           where: {
@@ -114,16 +194,20 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
         });
         if (count < period.target) {
           await client.responses.createMany({
-            data: Array.from({ length: period.target - count }, (_, index) => ({
-              workspace_id: workspaceId,
-              prompt_id: prompt.id,
-              platform: ["chatgpt", "claude", "perplexity"][index % 3],
-              text: "Acme is a CRM for small businesses, with practical reporting for growing teams. Compare g2.com/products/acme and acme.com/pricing.",
-              brand_mentioned: true,
-              competitors_mentioned: ["Northstar CRM"],
-              sources: [],
-              created_at: new Date(now.getTime() - (period.firstDayAgo + index) * 24 * 60 * 60 * 1000),
-            })),
+            data: Array.from({ length: period.target - count }, (_, index) => {
+              const daysAgo = period.firstDayAgo + (index % period.span);
+              const mix = demoMentionMix(daysAgo, index + period.firstDayAgo);
+              return {
+                workspace_id: workspaceId,
+                prompt_id: prompt.id,
+                platform: ["chatgpt", "claude", "perplexity"][index % 3],
+                text: demoResponseText("CRM research", mix.brandMentioned, mix.rivals.slice(0, 1), mix.rivals.slice(1)),
+                brand_mentioned: mix.brandMentioned,
+                competitors_mentioned: mix.rivals,
+                sources: [],
+                created_at: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000),
+              };
+            }),
           });
         }
       }
@@ -134,17 +218,16 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
     });
     for (let index = 0; index < crmResponses.length; index++) {
       const response = crmResponses[index];
-      const beforeCount = index % 4;
-      const before = ["Northstar CRM", "Orbit Sales", "Pipedrive"].slice(0, beforeCount);
-      const after = ["Northstar CRM", "Orbit Sales", "Pipedrive"].slice(beforeCount);
-      const marker = 'Demo competitor comparison:';
-      const originalText = response.text.split(marker)[0].trim();
-      const comparison = `${marker} ${before.length ? `${before.join(', ')} are mentioned before Acme` : 'Acme is mentioned before the competitors'}${after.length ? `, followed by ${after.join(', ')}` : ''}.`;
+      const daysAgo = Math.max(0, Math.round((now.getTime() - (response.created_at?.getTime() ?? now.getTime())) / 86_400_000));
+      const mix = demoMentionMix(daysAgo, index);
+      const before = mix.rivals.slice(0, index % (mix.rivals.length + 1));
+      const urls = response.text.match(/[a-z0-9.-]+\.[a-z]{2,}\/\S+/gi) ?? [];
       await client.responses.update({
         where: { id: response.id },
         data: {
-          text: before.length ? `${comparison} ${originalText}` : `${originalText} ${comparison}`,
-          competitors_mentioned: ["Northstar CRM", "Orbit Sales", "Pipedrive"],
+          text: [demoResponseText("CRM research", mix.brandMentioned, before, mix.rivals.slice(before.length)), ...urls].join(' '),
+          brand_mentioned: mix.brandMentioned,
+          competitors_mentioned: mix.rivals,
         },
       });
     }
@@ -156,8 +239,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best sales pipeline management CRM tools",
       currentCount: 6,
       previousCount: 4,
-      currentDaysAgo: 1,
-      previousDaysAgo: [10, 40],
       currentOrder: 0,
       previousOrder: 3,
       journeyStage: "comparing",
@@ -167,8 +248,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "CRM platforms for managing lead generation",
       currentCount: 7,
       previousCount: 6,
-      currentDaysAgo: 1,
-      previousDaysAgo: [10, 40],
       currentOrder: 1,
       previousOrder: 3,
       journeyStage: "solution-seeking",
@@ -178,8 +257,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best CRM workflow automation software",
       currentCount: 8,
       previousCount: 8,
-      currentDaysAgo: 1,
-      previousDaysAgo: [10, 40],
       currentOrder: 2,
       previousOrder: 3,
       journeyStage: "comparing",
@@ -189,8 +266,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best CRM software for early-stage startups",
       currentCount: 9,
       previousCount: 10,
-      currentDaysAgo: 1,
-      previousDaysAgo: [10, 40],
       currentOrder: 0,
       previousOrder: 3,
       journeyStage: "buying",
@@ -200,8 +275,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best deal pipeline software for small sales teams",
       currentCount: 10,
       previousCount: 12,
-      currentDaysAgo: 1,
-      previousDaysAgo: [10, 40],
       currentOrder: 1,
       previousOrder: 3,
       journeyStage: "comparing",
@@ -211,8 +284,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best CRM reporting tools for small teams",
       currentCount: 2,
       previousCount: 6,
-      currentDaysAgo: 2,
-      previousDaysAgo: [10, 40],
       currentOrder: 3,
       previousOrder: 3,
       journeyStage: "using",
@@ -222,8 +293,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best contact management software for small businesses",
       currentCount: 2,
       previousCount: 6,
-      currentDaysAgo: 2,
-      previousDaysAgo: [10, 40],
       currentOrder: 3,
       previousOrder: 3,
       journeyStage: "solution-seeking",
@@ -233,8 +302,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "CRM tools for accurate sales forecasting",
       currentCount: 2,
       previousCount: 8,
-      currentDaysAgo: 2,
-      previousDaysAgo: [10, 40],
       currentOrder: 3,
       previousOrder: 3,
       journeyStage: "buying",
@@ -244,8 +311,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best lead scoring software for B2B sales teams",
       currentCount: 2,
       previousCount: 6,
-      currentDaysAgo: 2,
-      previousDaysAgo: [10, 40],
       currentOrder: 3,
       previousOrder: 3,
       journeyStage: "solution-seeking",
@@ -255,8 +320,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best customer support software for growing teams",
       currentCount: 2,
       previousCount: 6,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 0,
       journeyStage: "problem-aware",
@@ -266,8 +329,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best customer retention software for SaaS businesses",
       currentCount: 2,
       previousCount: 7,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 1,
       journeyStage: "problem-aware",
@@ -277,8 +338,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "top sales engagement platforms for small teams",
       currentCount: 3,
       previousCount: 8,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 2,
       journeyStage: "comparing",
@@ -288,8 +347,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "CRM with marketing automation for growing companies",
       currentCount: 4,
       previousCount: 9,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 0,
       journeyStage: "solution-seeking",
@@ -299,8 +356,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best customer onboarding tools for SaaS teams",
       currentCount: 5,
       previousCount: 10,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 1,
       journeyStage: "using",
@@ -310,8 +365,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best customer success platforms for small businesses",
       currentCount: 2,
       previousCount: 7,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 2,
       journeyStage: "using",
@@ -321,8 +374,6 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best revenue operations software for growing teams",
       currentCount: 2,
       previousCount: 9,
-      currentDaysAgo: 2,
-      previousDaysAgo: [40],
       currentOrder: 3,
       previousOrder: 0,
       journeyStage: "buying",
@@ -332,15 +383,14 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
       prompt: "best support ticket automation tools",
       currentCount: 2,
       previousCount: 12,
-      currentDaysAgo: 2,
-      previousDaysAgo: [10, 40],
       currentOrder: 3,
       previousOrder: 0,
       journeyStage: "problem-aware",
     },
   ] as const;
 
-  for (const example of examples) {
+  for (let exampleIndex = 0; exampleIndex < examples.length; exampleIndex++) {
+    const example = examples[exampleIndex];
     const existingTopic = await client.topics.findFirst({ where: { workspace_id: workspaceId, name: example.topic } });
     const topic = existingTopic ?? await client.topics.create({
       data: { workspace_id: workspaceId, name: example.topic, description: `Demo prompts for ${example.topic.toLowerCase()}` },
@@ -362,31 +412,32 @@ async function seedTopicExamples(client: Prisma.TransactionClient, workspaceId: 
 
     const rows = [
       ...Array.from({ length: example.currentCount }, (_, index) => ({
-        daysAgo: example.currentDaysAgo + index,
+        daysAgo: index % 7,
         platform: ["chatgpt", "claude", "perplexity"][index % 3],
         beforeCount: example.currentOrder,
+        index,
       })),
-      ...example.previousDaysAgo.flatMap((daysAgo) => Array.from({ length: example.previousCount / example.previousDaysAgo.length }, (_, index) => ({
-        daysAgo,
+      ...Array.from({ length: example.previousCount }, (_, index) => ({
+        daysAgo: 8 + ((index * 5 + exampleIndex * 3) % 22),
         platform: ["chatgpt", "claude", "perplexity"][index % 3],
         beforeCount: example.previousOrder,
-      }))),
+        index: index + example.currentCount,
+      })),
     ];
     await client.responses.createMany({
-      data: rows.map(({ daysAgo, platform, beforeCount }) => {
-        const competitors = ["Northstar CRM", "Orbit Sales", "Pipedrive"];
-        const before = competitors.slice(0, beforeCount);
-        const after = competitors.slice(beforeCount);
+      data: rows.map(({ daysAgo, platform, beforeCount, index }) => {
+        const mix = demoMentionMix(daysAgo, index);
+        const before = mix.rivals.slice(0, beforeCount % (mix.rivals.length + 1));
         return {
-        workspace_id: workspaceId,
-        prompt_id: prompt.id,
-        platform,
-        text: `${before.length ? `${before.join(', ')} are mentioned before Acme for ${example.topic}. ` : ''}Acme is an option for ${example.topic}.${after.length ? ` ${after.join(', ')} are also compared.` : ''}`,
-        brand_mentioned: true,
-        competitors_mentioned: competitors,
-        sources: [],
-        created_at: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000),
-      };
+          workspace_id: workspaceId,
+          prompt_id: prompt.id,
+          platform,
+          text: demoResponseText(example.topic, mix.brandMentioned, before, mix.rivals.slice(before.length)),
+          brand_mentioned: mix.brandMentioned,
+          competitors_mentioned: mix.rivals,
+          sources: [],
+          created_at: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000),
+        };
       }),
     });
   }
@@ -524,15 +575,15 @@ async function seedDemoWorkspace(client: Prisma.TransactionClient, workspaceId: 
   });
   await client.competitors.createMany({
     data: ([
-      ["Northstar CRM", "northstarcrm.com", 74],
-      ["Orbit Sales", "orbitsales.com", 69],
-      ["Pipedrive", "pipedrive.com", 63],
-    ] as const).map(([name, domain, score]) => ({
+      ["Northstar CRM", "northstarcrm.com"],
+      ["Orbit Sales", "orbitsales.com"],
+      ["Pipedrive", "pipedrive.com"],
+    ] as const).map(([name, domain]) => ({
       workspace_id: workspaceId,
       name,
       domain,
-      initial_score: score,
-      mention_count: score,
+      initial_score: 0,
+      mention_count: 0,
       platforms_found: ["chatgpt", "claude", "perplexity"],
     })),
   });
@@ -556,15 +607,17 @@ async function seedDemoWorkspace(client: Prisma.TransactionClient, workspaceId: 
     data: [0, 1, 2, 3, 4, 5, 6].map((daysAgo) => ({
       workspace_id: workspaceId,
       date: new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000),
-      total_prompts: 186,
-      brand_mention_rate: 0.78 + (daysAgo % 3) * 0.01,
+      total_prompts: 0,
+      brand_mention_rate: 0,
       top_competitor: "Northstar CRM",
-      total_sources: 87,
-      total_domains: 10,
+      total_sources: 0,
+      total_domains: 0,
     })),
   });
   await client.bot_visits.createMany({ data: demoBotVisits(workspaceId, now) });
   await seedTopicExamples(client, workspaceId, now);
+  await attachRecentSources(client, workspaceId);
+  await syncDemoMetrics(client, workspaceId);
   await client.prompt_tracking_settings.create({ data: { workspace_id: workspaceId, frequency: "daily" } });
   await client.workspaces.update({ where: { id: workspaceId }, data: { demo_seed_version: DEMO_SEED_VERSION } });
 }
