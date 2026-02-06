@@ -10,7 +10,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useActiveWorkspaceName } from '@/hooks/use-active-workspace';
+import { useAddCompetitor } from '@/hooks/use-competitors';
 import { useToast } from '@/hooks/use-toast';
+import { companyLogoUrl } from '@/lib/logo-url';
 
 import { ProgressBar } from './progress-bar';
 import { EnterUrlStep } from './steps/enter-url-step';
@@ -291,6 +293,7 @@ export function IntelligenceWizard({
 }: IntelligenceWizardProps) {
   const organizationName = useActiveWorkspaceName();
   const { toast } = useToast();
+  const addCompetitor = useAddCompetitor();
   const isMockPromptPreview = import.meta.env.DEV
     && new URLSearchParams(window.location.search).get('mockIntelligencePrompts') === '1';
 
@@ -365,14 +368,47 @@ export function IntelligenceWizard({
     state.isLoading && state.currentStep === 'profile'
   );
 
-  // If initialBrandId is provided, this would be for loading saved research
-  // For now, we just start fresh - could implement loading saved results later
   useEffect(() => {
-    if (initialBrandId) {
-      // TODO: Implement loading saved research by ID
-      // For now, just log and start fresh
-      console.log('Initial brand ID provided:', initialBrandId);
-    }
+    if (!initialBrandId) return;
+    let cancelled = false;
+    setState((prev) => ({
+      ...prev,
+      isLoading: true,
+      loadingMessage: 'Loading saved research...',
+      error: null,
+    }));
+
+    fetch(`/api/intelligence/research/latest?brandId=${encodeURIComponent(initialBrandId)}`)
+      .then(async (res) => {
+        if (res.status === 404) {
+          if (!cancelled) setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            error: 'No saved research found for this brand. Run a new analysis.',
+          }));
+          return;
+        }
+        if (!res.ok) throw new Error('Could not load saved research');
+        const results = await res.json() as ResearchResults;
+        if (!cancelled) setState((prev) => ({
+          ...prev,
+          results,
+          currentStep: 'results',
+          isLoading: false,
+          isRunningResearch: false,
+          error: null,
+          loadingMessage: '',
+        }));
+      })
+      .catch((error) => {
+        if (!cancelled) setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Could not load saved research',
+        }));
+      });
+
+    return () => { cancelled = true; };
   }, [initialBrandId]);
 
   // Step 1: Submit URL - immediately transition to profile step, fetch in background
@@ -617,11 +653,26 @@ export function IntelligenceWizard({
     });
   }, []);
 
-  // Add as competitor (mock implementation)
-  const handleAddAsCompetitor = useCallback(() => {
-    // In real implementation, call API to add to tracked competitors
-    console.log('Adding as competitor:', state.results?.brand);
-  }, [state.results]);
+  const handleAddAsCompetitor = useCallback(async () => {
+    const brand = state.results?.brand;
+    if (!brand) return false;
+    try {
+      await addCompetitor.mutateAsync({
+        name: brand.name,
+        domain: brand.domain.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+        score: state.results?.score ?? 0,
+        platforms: (state.results?.platforms ?? []).filter((p) => p.isActive).map((p) => p.id),
+      });
+      return true;
+    } catch (error) {
+      toast({
+        title: 'Could not add competitor',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  }, [state.results, addCompetitor, toast]);
 
   // Full-page loading overlay for research
   if (state.isRunningResearch) {
@@ -704,7 +755,7 @@ export function IntelligenceWizard({
           onResearchAnother={handleResearchAnother}
           onAddAsCompetitor={handleAddAsCompetitor}
           userBrandName={organizationName}
-          userBrandLogo={`https://img.logo.dev/acme.com?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`}
+          userBrandLogo={companyLogoUrl('acme.com')}
         />
       )}
     </div>

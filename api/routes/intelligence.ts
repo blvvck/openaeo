@@ -13,6 +13,7 @@
 
 import { Router, Request, Response } from 'express';
 import { prisma } from '../prisma';
+import type { Prisma } from '@prisma/client';
 import { currentWorkspaceId } from '../context/workspace-context';
 import { getActiveBrandConfig } from '../services/brand-config';
 import { z } from 'zod';
@@ -1029,6 +1030,90 @@ router.post('/prompts/track', async (req: Request, res: Response) => {
  * Input: { targetBrand: BrandProfile, yourBrandId: string, prompts: CustomerPrompt[], platforms: string[], competitors?: SuggestedCompetitor[] }
  * Output: ResearchResults
  */
+interface ResearchResponse {
+  promptId: string;
+  promptText: string;
+  platformId: string;
+  response: PlatformResponse;
+}
+
+function sentimentLabel(score: number): 'positive' | 'mixed' | 'negative' {
+  return score > 0.2 ? 'positive' : score < -0.2 ? 'negative' : 'mixed';
+}
+
+function buildPromptResults(
+  prompts: CustomerPrompt[],
+  responses: ResearchResponse[],
+  brandName: string
+): PromptResult[] {
+  return prompts.map((prompt) => ({
+    promptId: prompt.id,
+    promptText: prompt.text,
+    results: responses
+      .filter((r) => r.promptId === prompt.id && r.response.success)
+      .map((r) => {
+        const mentioned = r.response.text.toLowerCase().includes(brandName.toLowerCase());
+        const position = mentioned ? getSimplePositionScore(r.response.text, brandName) : undefined;
+        let summary = 'Not mentioned';
+        if (mentioned) {
+          const sentences = r.response.text.split(/[.!?]+/);
+          const brandSentence = sentences.find((s) => s.toLowerCase().includes(brandName.toLowerCase()));
+          summary = brandSentence ? brandSentence.trim().slice(0, 100) + (brandSentence.length > 100 ? '...' : '') : 'Mentioned in response';
+        }
+        return {
+          platformId: r.platformId,
+          mentioned,
+          position: position ? Math.ceil(10 - position / 10) : undefined,
+          summary,
+          sentiment: mentioned ? sentimentLabel(getSimpleSentiment(r.response.text).score) : null,
+        };
+      }),
+  }));
+}
+
+function buildPlatformResults(
+  platformIds: PlatformName[],
+  responses: ResearchResponse[],
+  brandName: string,
+  brandDomain: string,
+  promptCount: number
+): PlatformResult[] {
+  return platformIds.map((platformId) => {
+    const platformResponses = responses.filter((r) => r.platformId === platformId && r.response.success);
+    const totalMentions = platformResponses.filter((r) =>
+      r.response.text.toLowerCase().includes(brandName.toLowerCase())
+    ).length;
+    const sentimentScores = platformResponses.map((r) => getSimpleSentiment(r.response.text).score);
+    const avgSentiment = sentimentScores.length > 0
+      ? sentimentScores.reduce((sum, score) => sum + score, 0) / sentimentScores.length
+      : 0;
+    const responsesWithCitations = platformResponses.filter((r) => {
+      const citations = extractCitations(r.response.text, platformId);
+      return citations.some((citation) =>
+        (brandDomain.length > 0 && citation.domain.toLowerCase().includes(brandDomain.toLowerCase())) ||
+        citation.context.toLowerCase().includes(brandName.toLowerCase())
+      );
+    });
+    const citationRate = platformResponses.length > 0
+      ? Math.round((responsesWithCitations.length / platformResponses.length) * 100)
+      : null;
+    const score = Math.min(100, Math.round(
+      (totalMentions / promptCount) * 50 +
+      ((avgSentiment + 1) / 2) * 30 +
+      (citationRate || 0) * 0.2
+    ));
+    return {
+      id: platformId,
+      name: getPlatformDisplayName(platformId),
+      isActive: platformResponses.length > 0,
+      score,
+      mentions: totalMentions,
+      sentiment: sentimentLabel(avgSentiment),
+      citationRate,
+    };
+  });
+}
+
 router.post('/research', async (req: Request, res: Response) => {
   const { targetBrand, yourBrandId, prompts: customerPrompts, platforms: requestedPlatforms, competitors } = req.body;
 
@@ -1055,12 +1140,7 @@ router.post('/research', async (req: Request, res: Response) => {
 
 
     // Collect all responses across prompts and platforms
-    const allResponses: Array<{
-      promptId: string;
-      promptText: string;
-      platformId: string;
-      response: PlatformResponse;
-    }> = [];
+    const allResponses: ResearchResponse[] = [];
 
     // Query each prompt across each platform
     // Rate limit: process 3 platforms concurrently, with delay between prompts
@@ -1095,77 +1175,15 @@ router.post('/research', async (req: Request, res: Response) => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Compute platform results
-    const platformResults: PlatformResult[] = platformsToQuery.map(platformId => {
-      const platformResponses = allResponses.filter(r => r.platformId === platformId && r.response.success);
-      const totalMentions = platformResponses.filter(r =>
-        r.response.text.toLowerCase().includes(targetBrand.name.toLowerCase())
-      ).length;
+    const platformResults = buildPlatformResults(
+      platformsToQuery, allResponses, targetBrand.name, targetBrand.domain, customerPrompts.length
+    );
+    const yourPlatformResults = buildPlatformResults(
+      platformsToQuery, allResponses, yourBrandName, userBrand?.domain || '', customerPrompts.length
+    );
 
-      // Calculate sentiment for this platform
-      const sentimentScores = platformResponses.map(r => getSimpleSentiment(r.response.text).score);
-      const avgSentiment = sentimentScores.length > 0
-        ? sentimentScores.reduce((a, b) => a + b, 0) / sentimentScores.length
-        : 0;
-
-      // Calculate citation rate
-      const responsesWithCitations = platformResponses.filter(r => {
-        const citations = extractCitations(r.response.text, platformId);
-        return citations.some(c =>
-          c.domain.toLowerCase().includes(targetBrand.domain.toLowerCase()) ||
-          c.context.toLowerCase().includes(targetBrand.name.toLowerCase())
-        );
-      });
-      const citationRate = platformResponses.length > 0
-        ? Math.round((responsesWithCitations.length / platformResponses.length) * 100)
-        : null;
-
-      // Calculate score based on mentions, sentiment, citations
-      const score = Math.min(100, Math.round(
-        (totalMentions / customerPrompts.length) * 50 +
-        ((avgSentiment + 1) / 2) * 30 +
-        (citationRate || 0) * 0.2
-      ));
-
-      return {
-        id: platformId,
-        name: getPlatformDisplayName(platformId),
-        isActive: platformResponses.length > 0,
-        score,
-        mentions: totalMentions,
-        sentiment: avgSentiment > 0.2 ? 'positive' : avgSentiment < -0.2 ? 'negative' : 'mixed',
-        citationRate,
-      };
-    });
-
-    // Compute prompt results
-    const promptResults: PromptResult[] = customerPrompts.map(prompt => {
-      const promptResponses = allResponses.filter(r => r.promptId === prompt.id && r.response.success);
-
-      return {
-        promptId: prompt.id,
-        promptText: prompt.text,
-        results: promptResponses.map(r => {
-          const mentioned = r.response.text.toLowerCase().includes(targetBrand.name.toLowerCase());
-          const position = mentioned ? getSimplePositionScore(r.response.text, targetBrand.name) : undefined;
-
-          // Generate summary
-          let summary = 'Not mentioned';
-          if (mentioned) {
-            const sentences = r.response.text.split(/[.!?]+/);
-            const brandSentence = sentences.find(s => s.toLowerCase().includes(targetBrand.name.toLowerCase()));
-            summary = brandSentence ? brandSentence.trim().slice(0, 100) + (brandSentence.length > 100 ? '...' : '') : 'Mentioned in response';
-          }
-
-          return {
-            platformId: r.platformId,
-            mentioned,
-            position: position ? Math.ceil(10 - position / 10) : undefined, // Convert score to position 1-10
-            summary,
-          };
-        }),
-      };
-    });
+    const promptResults = buildPromptResults(customerPrompts, allResponses, targetBrand.name);
+    const yourPromptResults = buildPromptResults(customerPrompts, allResponses, yourBrandName);
 
     // Compute H2H metrics
     const h2hMetrics = computeH2HFromResponses(
@@ -1218,6 +1236,12 @@ router.post('/research', async (req: Request, res: Response) => {
       h2hMetrics,
       allResponses
     );
+    const yourInsights = await generateInsights(
+      { ...targetBrand, name: yourBrandName, domain: userBrand?.domain || targetBrand.domain },
+      yourPlatformResults,
+      { ...h2hMetrics, target: h2hMetrics.you, you: h2hMetrics.target },
+      allResponses
+    );
 
     // Calculate overall score
     const activePlatforms = platformResults.filter(p => p.isActive).length;
@@ -1231,16 +1255,61 @@ router.post('/research', async (req: Request, res: Response) => {
       activePlatforms,
       platforms: platformResults,
       promptResults,
+      yourPromptResults,
       insights,
+      yourInsights,
       competitorComparison,
       h2hMetrics,
       completedAt: new Date().toISOString(),
     };
 
-    res.json(results);
+    const workspaceId = currentWorkspaceId();
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'Workspace context is required' });
+    }
+    const saved = await prisma.intelligence_reports.create({
+      data: {
+        workspace_id: workspaceId,
+        brand_id: targetBrand.id || targetBrand.name,
+        domain: targetBrand.domain || '',
+        results: results as unknown as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+
+    res.json({ ...results, reportId: saved.id });
   } catch (error) {
     console.error('[Intelligence/research] Error:', error);
     res.status(500).json({ error: 'Failed to run research' });
+  }
+});
+
+/**
+ * GET /api/intelligence/research/latest?brandId=<id>
+ * Returns the most recent saved research for a brand in this workspace.
+ */
+router.get('/research/latest', async (req: Request, res: Response) => {
+  try {
+    const brandId = req.query.brandId;
+    if (typeof brandId !== 'string' || brandId.length === 0) {
+      return res.status(400).json({ error: 'brandId is required' });
+    }
+    const workspaceId = currentWorkspaceId();
+    if (!workspaceId) {
+      return res.status(400).json({ error: 'Workspace context is required' });
+    }
+    const report = await prisma.intelligence_reports.findFirst({
+      where: { workspace_id: workspaceId, brand_id: brandId },
+      orderBy: { created_at: 'desc' },
+      select: { results: true, id: true },
+    });
+    if (!report) {
+      return res.status(404).json({ error: 'No saved research for this brand' });
+    }
+    res.json({ ...(report.results as unknown as ResearchResults), reportId: report.id });
+  } catch (error) {
+    console.error('[Intelligence/research/latest] Error:', error);
+    res.status(500).json({ error: 'Failed to load saved research' });
   }
 });
 

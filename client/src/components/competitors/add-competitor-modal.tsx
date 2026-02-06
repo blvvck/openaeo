@@ -3,6 +3,7 @@ import { workspaceFetch as fetch } from '@/lib/workspace-query';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { companyLogoUrl } from '@/lib/logo-url';
 import {
   X,
   Search,
@@ -113,8 +114,7 @@ async function validateDomain(domain: string): Promise<{ valid: boolean; normali
 async function identifyCompany(domain: string): Promise<CompanyInfo | null> {
   const normalized = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').trim();
 
-  // Generate logo URL using Logo.dev (free public API)
-  const logoUrl = `https://img.logo.dev/${normalized}?token=pk_X-1ZO13GSgeOoUrIuJ6GMQ`;
+  const logoUrl = companyLogoUrl(normalized);
 
   try {
     const response = await fetch('/api/competitors/identify', {
@@ -211,31 +211,31 @@ function generateFallbackPrompts(companyName: string): Array<{ text: string; cat
  */
 const ALL_PLATFORM_IDS = PLATFORMS.map(p => p.id);
 
-/**
- * Simulates visibility scan across platforms
- * Mock data: well-known companies found on most platforms (80%+ chance)
- */
 async function* scanPlatforms(
+  company: CompanyInfo,
   prompts: DiscoveredPrompt[],
   onProgress: (platformId: string, progress: number) => void
 ): AsyncGenerator<PlatformScanResult> {
-  for (const platformId of ALL_PLATFORM_IDS) {
-    // Simulate incremental progress
-    for (let progress = 0; progress <= 100; progress += 25) {
-      await new Promise(r => setTimeout(r, 100));
-      onProgress(platformId, progress);
-    }
+  const response = await fetch('/api/competitors/scan-platforms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      company: company.name,
+      prompts: prompts.map((prompt) => prompt.text),
+    }),
+  });
 
-    // Mock data: 85% chance of being found (realistic for known companies)
-    const found = Math.random() > 0.15;
-    const score = found ? Math.floor(45 + Math.random() * 45) : 0;
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { message?: string };
+    throw new Error(payload.message || 'Platform scan failed. Please try again.');
+  }
 
-    yield {
-      platformId,
-      found,
-      score,
-      progress: 100,
-    };
+  const payload = await response.json() as {
+    platforms: Array<{ platformId: string; found: boolean; score: number }>;
+  };
+  for (const result of payload.platforms) {
+    onProgress(result.platformId, 100);
+    yield { platformId: result.platformId, found: result.found, score: result.score, progress: 100 };
   }
 }
 
@@ -474,7 +474,7 @@ function IdentifyStep({ state, onUpdate, onNext, onBack, onCancel }: StepProps) 
               }}
             />
           ) : null}
-          <div className={`w-12 h-12 rounded-lg bg-figma-blue/10 flex items-center justify-center shrink-0 ${state.company.logoUrl ? 'hidden' : ''}`}>
+          <div className={`w-12 h-12 rounded-lg bg-figma-blue-light flex items-center justify-center shrink-0 ${state.company.logoUrl ? 'hidden' : ''}`}>
             <Building2 className="w-6 h-6 text-figma-blue" />
           </div>
           <div className="flex-1 min-w-0">
@@ -682,6 +682,7 @@ function ScanStep({ state, onUpdate, onNext, onBack, onCancel }: StepProps) {
         const selectedPrompts = state.prompts.filter(p => state.selectedPromptIds.has(p.id));
 
         for await (const result of scanPlatforms(
+          state.company!,
           selectedPrompts,
           (platformId, progress) => {
             const current = results.get(platformId);
@@ -700,15 +701,15 @@ function ScanStep({ state, onUpdate, onNext, onBack, onCancel }: StepProps) {
         const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
         onUpdate({ finalScore: avgScore });
 
-      } catch {
-        onUpdate({ error: 'Scan failed. Please try again.' });
+      } catch (error) {
+        onUpdate({ error: error instanceof Error ? error.message : 'Scan failed. Please try again.' });
       }
 
       setIsScanning(false);
     };
 
     scan();
-  }, [state.prompts, state.selectedPromptIds, onUpdate]);
+  }, [state.company, state.prompts, state.selectedPromptIds, onUpdate]);
 
   const platformsFound = Array.from(state.scanResults.values()).filter(r => r.found).length;
   const totalPlatforms = state.scanResults.size;

@@ -8,7 +8,29 @@
 import { cn } from '@/lib/utils';
 import { ContentCard } from '@/components/shared';
 import { PlatformIcon } from '@/components/ui/platform-icon';
-import type { PlatformResult } from '../types';
+import type { PlatformResult, PromptResult } from '../types';
+
+export function yourPlatformMetrics(results: PromptResult[] | undefined, platformId: string): PlatformMetrics {
+  const entries = (results ?? []).flatMap((prompt) => prompt.results)
+    .filter((entry) => entry.platformId === platformId);
+  if (entries.length === 0) return { score: 0, mentions: 0, citationRate: null, sentiment: null };
+  const mentioned = entries.filter((entry) => entry.mentioned);
+  const mentions = mentioned.length;
+  const citations = entries.filter((entry) => /https?:\/\//i.test(entry.summary)).length;
+  const sentimentValues: number[] = mentioned
+    .map((entry) => entry.sentiment)
+    .filter((value): value is 'positive' | 'mixed' | 'negative' => value !== null)
+    .map((value) => value === 'positive' ? 1 : value === 'negative' ? -1 : 0);
+  const average = sentimentValues.length > 0
+    ? sentimentValues.reduce((sum, value) => sum + value, 0) / sentimentValues.length
+    : null;
+  return {
+    score: Math.round((mentions / entries.length) * 100),
+    mentions,
+    citationRate: Math.round((citations / entries.length) * 100),
+    sentiment: average === null ? null : average > 0.33 ? 'positive' : average < -0.33 ? 'negative' : 'mixed',
+  };
+}
 
 interface PlatformMetrics {
   score: number;
@@ -27,6 +49,7 @@ interface PlatformComparisonData {
 
 interface PlatformPerformanceCardProps {
   platforms: PlatformResult[];
+  yourResults?: PromptResult[];
   targetName: string;
   yourName: string;
   className?: string;
@@ -41,7 +64,7 @@ function MetricValue({
   suffix?: string;
 }) {
   if (value === null || value === 0) {
-    return <span className="text-figma-muted/60">✕</span>;
+    return <span className="text-figma-muted opacity-60">✕</span>;
   }
   return <span>{value}{suffix}</span>;
 }
@@ -49,7 +72,7 @@ function MetricValue({
 // Sentiment dot indicator
 function SentimentDot({ sentiment }: { sentiment: 'positive' | 'mixed' | 'negative' | null }) {
   if (!sentiment) {
-    return <span className="text-figma-muted/60">✕</span>;
+    return <span className="text-figma-muted opacity-60">✕</span>;
   }
 
   const colors = {
@@ -68,12 +91,11 @@ function SentimentDot({ sentiment }: { sentiment: 'positive' | 'mixed' | 'negati
 
 export function PlatformPerformanceCard({
   platforms,
+  yourResults,
   targetName,
   yourName,
   className,
 }: PlatformPerformanceCardProps) {
-  // Generate comparison data from platforms array
-  // In real implementation, backend would provide both brands' data
   const comparisonData: PlatformComparisonData[] = platforms.map((p) => ({
     platformId: p.id,
     platformName: p.name,
@@ -84,13 +106,7 @@ export function PlatformPerformanceCard({
       citationRate: p.citationRate,
       sentiment: p.sentiment,
     },
-    you: {
-      // Mock "you" data - offset from target for demo
-      score: p.isActive ? Math.max(0, p.score + Math.floor(Math.random() * 20 - 10)) : 0,
-      mentions: p.isActive ? Math.max(0, p.mentions + Math.floor(Math.random() * 40 - 20)) : 0,
-      citationRate: p.isActive && p.citationRate ? Math.max(0, Math.min(100, p.citationRate + Math.floor(Math.random() * 20 - 10))) : null,
-      sentiment: p.isActive ? (['positive', 'mixed', 'negative'] as const)[Math.floor(Math.random() * 3)] : null,
-    },
+    you: yourPlatformMetrics(yourResults, p.id),
   }));
 
   return (
@@ -104,7 +120,7 @@ export function PlatformPerformanceCard({
         {comparisonData.map((row) => (
             <div
               key={row.platformId}
-              className="border border-figma-border-light/20 rounded-xl p-4 bg-figma-bg"
+              className="border border-figma-border-light rounded-xl p-4 bg-figma-bg"
             >
               {/* Platform header */}
               <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-figma-border-light">
@@ -124,7 +140,7 @@ export function PlatformPerformanceCard({
                 </div>
 
                 {/* Score row */}
-                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light/50 text-figma-xs">
+                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light text-figma-xs">
                   <div className="text-figma-secondary">Score</div>
                   <div className="text-center font-semibold tabular-nums">
                     <MetricValue value={row.target.score} />
@@ -135,7 +151,7 @@ export function PlatformPerformanceCard({
                 </div>
 
                 {/* Mentions row */}
-                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light/50 text-figma-xs">
+                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light text-figma-xs">
                   <div className="text-figma-secondary">Mentions</div>
                   <div className="text-center tabular-nums">
                     <MetricValue value={row.target.mentions} />
@@ -146,7 +162,7 @@ export function PlatformPerformanceCard({
                 </div>
 
                 {/* Citation Rate row */}
-                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light/50 text-figma-xs">
+                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light text-figma-xs">
                   <div className="text-figma-secondary">Citations</div>
                   <div className="text-center tabular-nums">
                     <MetricValue value={row.target.citationRate} suffix="%" />
@@ -157,7 +173,7 @@ export function PlatformPerformanceCard({
                 </div>
 
                 {/* Sentiment row */}
-                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light/50 text-figma-xs">
+                <div className="grid grid-cols-[1fr_80px_80px] gap-2 py-2 border-t border-figma-border-light text-figma-xs">
                   <div className="text-figma-secondary">Sentiment</div>
                   <div className="flex justify-center">
                     <SentimentDot sentiment={row.target.sentiment} />

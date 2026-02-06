@@ -119,6 +119,7 @@ export interface PromptResult {
     mentioned: boolean;
     position?: number;
     summary: string;
+    sentiment: 'positive' | 'mixed' | 'negative' | null;
   }>;
 }
 
@@ -177,7 +178,13 @@ export interface ResearchResults {
   activePlatforms: number;
   platforms: PlatformResult[];
   promptResults: PromptResult[];
+  yourPromptResults: PromptResult[];
   insights: {
+    strengths: string[];
+    gaps: string[];
+    opportunities: string[];
+  };
+  yourInsights: {
     strengths: string[];
     gaps: string[];
     opportunities: string[];
@@ -185,6 +192,7 @@ export interface ResearchResults {
   competitorComparison: CompetitorResult[];
   h2hMetrics: H2HMetrics;
   completedAt: string;
+  reportId?: string;
 }
 
 /**

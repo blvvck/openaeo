@@ -3,9 +3,17 @@ import { storage } from "../data";
 import { insertPromptSchema } from "@shared/schema";
 import { z } from "zod";
 import { currentWorkspaceId } from "../context/workspace-context";
+import { getActiveBrandConfig } from "../services/brand-config";
+import { analyzePosition } from "../services/analytics/position-scorer";
 import { getNextPromptRunAt, getPromptFrequency, PROMPT_FREQUENCIES, queueDuePromptRun, scheduleDuePromptRun, updatePromptFrequency } from "../services/prompts/prompt-tracking";
 
 const router = Router();
+
+function brandEntity(text: string, brandName: string, aliases: string[]): string {
+  const lower = text.toLowerCase();
+  if (lower.includes(brandName.toLowerCase())) return brandName;
+  return aliases.find((alias) => lower.includes(alias.toLowerCase())) ?? brandName;
+}
 
 router.post("/run-now", async (_req, res) => {
     try {
@@ -140,8 +148,15 @@ router.get("/top", async (req, res) => {
         const responses = await storage.getResponsesInTimeRange(fromDate, now);
 
         // Get competitors for competitor mention detection
-        const competitors = await storage.getCompetitors();
+        const [competitors, brandConfig] = await Promise.all([
+            storage.getCompetitors(),
+            getActiveBrandConfig(),
+        ]);
         const competitorNames = competitors.map(c => c.name.toLowerCase());
+        const brandName = brandConfig?.name || 'Your Brand';
+        const brandAliases = Array.isArray(brandConfig?.aliases)
+            ? (brandConfig.aliases as unknown[]).filter((alias): alias is string => typeof alias === 'string')
+            : [];
 
         // Get all unique platforms from all responses for consistent display
         const allSystemPlatforms = Array.from(new Set(responses.map(r => (r as any).platform).filter(Boolean))).sort();
@@ -183,9 +198,16 @@ router.get("/top", async (req, res) => {
             }
             const competitorsMentioned = Array.from(mentionedCompetitors);
 
-            // Calculate average position (placeholder - would need actual ranking data)
-            // For now, use mention count as proxy (more mentions = likely higher position)
-            const position = mentions > 0 ? Math.max(1, Math.ceil(5 - (mentions / 2))) : null;
+            const ranks = mentionResponses
+                .map((r) => analyzePosition(
+                    r.text,
+                    brandEntity(r.text, brandName, brandAliases),
+                    competitors.map((c) => c.name),
+                ).ranking.brandRank)
+                .filter((rank) => rank > 0);
+            const position = ranks.length > 0
+                ? Math.round((ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length) * 10) / 10
+                : null;
 
             // Get topic names from topicIds array, fallback to single topicId
             const topicIds = (prompt as any).topicIds ?? (prompt.topicId ? [prompt.topicId] : []);

@@ -45,6 +45,7 @@ export interface PromptResult {
     mentioned: boolean;
     position?: number;
     summary: string;
+    sentiment: 'positive' | 'mixed' | 'negative' | null;
   }>;
 }
 
@@ -107,6 +108,7 @@ export interface ResearchResults {
   competitorComparison: CompetitorResult[];
   h2hMetrics: H2HMetrics; // NEW: H2H metrics for hero cards
   completedAt: string;
+  reportId?: string;
 }
 
 export type WizardStep = 'url' | 'profile' | 'competitors' | 'prompts' | 'results';

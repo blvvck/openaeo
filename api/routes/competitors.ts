@@ -11,16 +11,41 @@ import { AI_PLATFORMS } from '@shared/types/platforms';
 import { calculateVisibilityScore } from '../services/analytics/visibility-calculator';
 import { compareCompetitors } from '../services/analytics/competitor-detector';
 import { analyzeCitations } from '../services/analytics/citation-tracker';
+import { getSimpleSentiment } from '../services/analytics/sentiment-analyzer';
 import type { TimeRangePreset, CompetitorMetricsResponse } from '@shared/types';
 import { currentWorkspaceId } from '../context/workspace-context';
 import { prismaRoot } from '../prisma';
 import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
+import { getClient, hasApiAccess } from '../services/platforms/api-clients';
+import type { PlatformName } from '../services/platforms/types';
 
 async function workspaceNameFallback(): Promise<string> {
   const workspaceId = currentWorkspaceId();
   if (!workspaceId) return 'Your organization';
   const workspace = await prismaRoot.workspaces.findUnique({ where: { id: workspaceId }, select: { name: true } });
   return workspace?.name ?? 'Your organization';
+}
+
+const HIGH_INTENT_KEYWORDS = ['buy', 'purchase', 'pricing', 'cost', 'best', 'top', 'recommend', 'vs', 'compare', 'alternative'];
+
+function entityTerms(name: string, aliases: unknown, isBrand: boolean): string[] {
+  const extra = isBrand && Array.isArray(aliases) ? aliases.filter((value): value is string => typeof value === 'string') : [];
+  return [name, ...extra].map(term => term.toLowerCase().trim());
+}
+
+function mentionsEntity(text: string, terms: string[]): boolean {
+  const lower = text.toLowerCase();
+  return terms.some(term => lower.includes(term));
+}
+
+function hasCitation(text: string): boolean {
+  return /[a-z0-9.-]+\.[a-z]{2,}\/\S+/i.test(text);
+}
+
+function sentimentBonusFor(responses: Array<{ text: string }>): number {
+  if (responses.length === 0) return 0;
+  const total = responses.reduce((sum, response) => sum + getSimpleSentiment(response.text).score, 0);
+  return Math.round((total / responses.length) * 10);
 }
 
 const router = Router();
@@ -620,22 +645,66 @@ Generate relevant search prompts.`,
 }
 
 /**
- * Simulate scanning a platform for visibility
- * TODO: In production, this would call PlatformRouter.querySinglePlatform
- * with proper type mapping between PlatformId and PlatformName
+ * Scan real platform APIs for competitor visibility.
  */
-async function simulatePlatformScan(
-  platformId: string,
-  _companyName: string
-): Promise<{ found: boolean; score: number }> {
-  // Simulate varying success rates per platform
-  // In production, this would call real platform APIs
-  await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
+interface PlatformScan {
+  platformId: string;
+  found: boolean;
+  score: number;
+  available: boolean;
+  error?: string;
+}
 
-  const found = Math.random() > 0.2; // 80% chance of being found
-  const score = found ? Math.floor(40 + Math.random() * 45) : 0;
+const PLATFORM_NAME_BY_ID: Record<string, PlatformName> = {
+  chatgpt: 'chatgpt',
+  claude: 'claude',
+  gemini: 'gemini',
+  grok: 'grok',
+  deepseek: 'deepseek',
+  perplexity: 'perplexity',
+  'ai-mode': 'google-ai-mode',
+  'ai-overview': 'google-ai-overview',
+};
 
-  return { found, score };
+async function scanRealPlatforms(
+  company: string,
+  prompts: string[]
+): Promise<{ results: PlatformScan[]; missing: string[] }> {
+  const terms = [company, company.replace(/\s+(inc|llc|ltd)\.?$/i, '')]
+    .filter(Boolean).map((term) => term.toLowerCase().trim());
+  const results: PlatformScan[] = [];
+  const missing: string[] = [];
+
+  for (const platform of AI_PLATFORMS) {
+    const name = PLATFORM_NAME_BY_ID[platform.id];
+    if (!name || !hasApiAccess(name)) {
+      missing.push(platform.name);
+      results.push({ platformId: platform.id, found: false, score: 0, available: false });
+      continue;
+    }
+    const client = getClient(name);
+    let mentions = 0;
+    let calls = 0;
+    let error: string | undefined;
+    for (const prompt of prompts.slice(0, 5)) {
+      calls++;
+      try {
+        const response = await client.query(prompt);
+        if (response.success && terms.some((term) => response.text.toLowerCase().includes(term))) mentions++;
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+    }
+    results.push({
+      platformId: platform.id,
+      found: mentions > 0,
+      score: calls > 0 ? Math.round((mentions / calls) * 100) : 0,
+      available: true,
+      ...(error ? { error } : {}),
+    });
+  }
+
+  return { results, missing };
 }
 
 // =============================================================================
@@ -647,14 +716,19 @@ async function simulatePlatformScan(
  * Validates a domain exists via DNS lookup
  */
 router.post('/validate-domain', async (req, res) => {
-  const { domain } = req.body;
+  try {
+    const { domain } = req.body;
 
-  if (!domain || typeof domain !== 'string') {
-    return res.status(400).json({ valid: false, error: 'Domain is required' });
+    if (!domain || typeof domain !== 'string') {
+      return res.status(400).json({ valid: false, error: 'Domain is required' });
+    }
+
+    const result = await validateDomain(domain);
+    res.json(result);
+  } catch (error) {
+    console.error('[Competitors API] Error validating domain:', error);
+    res.status(500).json({ valid: false, error: 'Could not validate domain' });
   }
-
-  const result = await validateDomain(domain);
-  res.json(result);
 });
 
 /**
@@ -697,6 +771,34 @@ router.get('/rate-limit', (req, res) => {
     limit: DAILY_LIMIT,
     resetAt: status.resetAt.toISOString(),
   });
+});
+
+/**
+ * POST /api/competitors/scan-platforms
+ * Runs real platform API queries for the selected prompts.
+ */
+router.post('/scan-platforms', async (req: Request, res: Response) => {
+  try {
+    const parsed = z.object({
+      company: z.string().min(1),
+      prompts: z.array(z.string().min(1)).min(1).max(10),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'INVALID_REQUEST', details: parsed.error.flatten().fieldErrors });
+    }
+    const scan = await scanRealPlatforms(parsed.data.company, parsed.data.prompts);
+    if (scan.missing.length === scan.results.length) {
+      return res.status(400).json({
+        code: 'PLATFORM_API_KEY_MISSING',
+        message: `No provider API keys are configured. Set them in .env.local or Settings → Integrations before scanning: ${scan.missing.join(', ')}.`,
+        missingPlatforms: scan.missing,
+      });
+    }
+    res.json({ platforms: scan.results, missingPlatforms: scan.missing });
+  } catch (error) {
+    console.error('[Competitors] Real platform scan failed:', error);
+    res.status(500).json({ code: 'SCAN_FAILED', message: 'Platform scan failed. Please try again.' });
+  }
 });
 
 /**
@@ -822,56 +924,30 @@ router.post('/discover', async (req, res) => {
 
     // Step 4: Scan platforms (only if prompts selected)
     if (selectedPromptIds && selectedPromptIds.length > 0) {
-      const selectedPrompts = selectedPromptIds; // These would be prompt texts
-
-      // Get all 8 platforms from AI_PLATFORMS
-      const platformResults: Record<string, { found: boolean; score: number }> = {};
-      let totalScore = 0;
-      let platformsFound = 0;
-
-      for (const platform of AI_PLATFORMS) {
-        // Send progress update
-        sendEvent('scan_progress', {
-          platform: platform.id,
-          progress: 25,
+      const scan = await scanRealPlatforms(company.name, selectedPromptIds);
+      if (scan.missing.length === scan.results.length) {
+        sendEvent('error', {
+          code: 'PLATFORM_API_KEY_MISSING',
+          message: `No provider API keys are configured. Set them in .env.local or Settings → Integrations before scanning: ${scan.missing.join(', ')}.`,
+          missingPlatforms: scan.missing,
         });
-
-        await new Promise((r) => setTimeout(r, 200));
-
-        sendEvent('scan_progress', {
-          platform: platform.id,
-          progress: 50,
-        });
-
-        // Actually scan (or mock for now based on randomness)
-        // In production, this would call the real platform APIs
-        const found = Math.random() > 0.2; // 80% chance of being found
-        const score = found ? Math.floor(40 + Math.random() * 45) : 0;
-
-        await new Promise((r) => setTimeout(r, 300));
-
-        sendEvent('scan_progress', {
-          platform: platform.id,
-          progress: 100,
-        });
-
-        platformResults[platform.id] = { found, score };
-
-        sendEvent('scan_result', {
-          platform: platform.id,
-          found,
-          score,
-        });
-
-        if (found) {
-          totalScore += score;
-          platformsFound++;
-        }
+        res.end();
+        return;
       }
 
-      // Calculate final score
-      const finalScore = platformsFound > 0 ? Math.round(totalScore / platformsFound) : 0;
+      let totalScore = 0;
+      let platformsFound = 0;
+      for (const result of scan.results) {
+        sendEvent('scan_progress', { platform: result.platformId, progress: 50 });
+        sendEvent('scan_result', result);
+        if (result.found) {
+          totalScore += result.score;
+          platformsFound++;
+        }
+        sendEvent('scan_progress', { platform: result.platformId, progress: 100 });
+      }
 
+      const finalScore = platformsFound > 0 ? Math.round(totalScore / platformsFound) : 0;
       sendEvent('complete', {
         finalScore,
         platformsFound,
@@ -879,6 +955,7 @@ router.post('/discover', async (req, res) => {
         promptCount: selectedPromptIds.length,
         company,
         domain: domainResult.normalized,
+        missingPlatforms: scan.missing,
       });
     }
 
@@ -1065,9 +1142,9 @@ const METRICS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 /**
  * Calculate time window from time range preset
  */
-function getTimeWindow(timeRange: TimeRangePreset): { start: Date; end: Date } {
+function getTimeWindow(timeRange: TimeRangePreset, startDate?: unknown, endDate?: unknown): { start: Date; end: Date; error?: string } {
   const now = new Date();
-  const end = now;
+  const end = endDate ? new Date(String(endDate)) : now;
 
   let start: Date;
   switch (timeRange) {
@@ -1092,6 +1169,19 @@ function getTimeWindow(timeRange: TimeRangePreset): { start: Date; end: Date } {
     case '90d':
       start = new Date(end.getTime() - 90 * 24 * 60 * 60 * 1000);
       break;
+    case '365d':
+      start = new Date(end.getTime() - 365 * 24 * 60 * 60 * 1000);
+      break;
+    case 'all':
+      start = new Date(2020, 0, 1);
+      break;
+    case 'custom':
+      if (!startDate || !endDate) return { start: now, end: now, error: 'INVALID_TIME_RANGE' };
+      start = new Date(String(startDate));
+      if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
+        return { start: now, end: now, error: 'INVALID_TIME_RANGE' };
+      }
+      return { start, end };
     default:
       start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
   }
@@ -1106,7 +1196,7 @@ function getTimeWindow(timeRange: TimeRangePreset): { start: Date; end: Date } {
 router.get('/metrics', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'metrics', timeRange);
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'metrics', timeRange, String(req.query.startDate ?? ''), String(req.query.endDate ?? ''));
 
     // Check cache
     const cached = metricsCache.get(cacheKey);
@@ -1123,7 +1213,8 @@ router.get('/metrics', async (req: Request, res: Response) => {
     }
 
     // Get time windows
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
 
     // Fetch data in parallel
@@ -1574,7 +1665,7 @@ import type {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'list', timeRange);
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'list', timeRange, String(req.query.startDate ?? ''), String(req.query.endDate ?? ''));
 
     // Check cache
     const cached = competitorsCache.get(cacheKey);
@@ -1591,7 +1682,8 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     // Get time windows
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
 
     // Fetch data in parallel
@@ -1654,35 +1746,27 @@ router.get('/', async (req: Request, res: Response) => {
         )
       : null;
 
-    // High-intent keywords
-    const highIntentKeywords = ['buy', 'purchase', 'pricing', 'cost', 'best', 'top', 'recommend', 'vs', 'compare', 'alternative'];
-
     // Build per-competitor metrics
     const competitorDetails: CompetitorDetail[] = competitorComparison.ranking.map((entity, idx) => {
+      const terms = entityTerms(entity.name, activeBrandConfig?.aliases, Boolean(entity.isBrand));
       const prevEntity = previousComparison?.ranking.find(e => e.name === entity.name);
       const trend = prevEntity ? entity.score - prevEntity.score : 0;
       const previousRank = prevEntity ? previousComparison?.ranking.indexOf(prevEntity)! + 1 : idx + 1;
       const rankChange = previousRank - (idx + 1); // positive = moved up
 
       // Calculate share of answer for this entity
-      const entityResponses = currentResponses.filter(r => {
-        const text = r.text.toLowerCase();
-        return text.includes(entity.name.toLowerCase());
-      });
+      const entityResponses = currentResponses.filter(r => mentionsEntity(r.text, terms));
       const shareOfAnswer = currentResponses.length > 0
         ? (entityResponses.length / currentResponses.length) * 100
         : 0;
 
       // Calculate high-intent coverage for this entity
       const highIntentResponses = currentResponses.filter(r =>
-        highIntentKeywords.some(keyword =>
+        HIGH_INTENT_KEYWORDS.some(keyword =>
           r.prompt?.text?.toLowerCase().includes(keyword)
         )
       );
-      const entityHighIntent = highIntentResponses.filter(r => {
-        const text = r.text.toLowerCase();
-        return text.includes(entity.name.toLowerCase());
-      });
+      const entityHighIntent = highIntentResponses.filter(r => mentionsEntity(r.text, terms));
       const highIntent = highIntentResponses.length > 0
         ? (entityHighIntent.length / highIntentResponses.length) * 100
         : 0;
@@ -1707,11 +1791,10 @@ router.get('/', async (req: Request, res: Response) => {
       // Calculate mentions count
       const mentions = entityResponses.length;
 
-      // Calculate citation rate (simplified)
-      const citationRate = entity.isBrand ? 100 : Math.round(40 + Math.random() * 50);
-
-      // Calculate sentiment bonus (simplified)
-      const sentimentBonus = Math.floor(Math.random() * 10);
+      const citationRate = entityResponses.length > 0
+        ? Math.round((entityResponses.filter(r => hasCitation(r.text)).length / entityResponses.length) * 100)
+        : 0;
+      const sentimentBonus = sentimentBonusFor(entityResponses);
 
       // Calculate platform scores
       const platformScores: Record<string, number> = {};
@@ -1721,7 +1804,7 @@ router.get('/', async (req: Request, res: Response) => {
         const platform = r.platform || 'unknown';
         const existing = platformMentions.get(platform) || { total: 0, mentions: 0 };
         existing.total++;
-        if (r.text.toLowerCase().includes(entity.name.toLowerCase())) {
+        if (mentionsEntity(r.text, terms)) {
           existing.mentions++;
         }
         platformMentions.set(platform, existing);
@@ -1833,7 +1916,7 @@ const PLATFORM_BREAKDOWN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 router.get('/by-platform', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'platform-breakdown', timeRange);
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'platform-breakdown', timeRange, String(req.query.startDate ?? ''), String(req.query.endDate ?? ''));
 
     // Check cache
     const cached = platformBreakdownCache.get(cacheKey);
@@ -1850,7 +1933,8 @@ router.get('/by-platform', async (req: Request, res: Response) => {
     }
 
     // Get time window
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
 
     // Fetch data in parallel
     const [currentResponses, competitors, activeBrandConfig] = await Promise.all([
@@ -1951,7 +2035,7 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
   try {
     const competitorId = req.params.id;
     const timeRange = (req.query.timeRange as TimeRangePreset) || (req.query.range as TimeRangePreset) || '7d';
-    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'compare', competitorId, timeRange);
+    const cacheKey = workspaceCacheKey('competitors', currentWorkspaceId() ?? 'unscoped', 'compare', competitorId, timeRange, String(req.query.startDate ?? ''), String(req.query.endDate ?? ''));
 
     // Check cache
     const cached = compareCache.get(cacheKey);
@@ -1968,7 +2052,8 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
     }
 
     // Get time window
-    const { start, end } = getTimeWindow(timeRange);
+    const { start, end, error } = getTimeWindow(timeRange, req.query.startDate, req.query.endDate);
+    if (error) return res.status(400).json({ code: error, message: 'Invalid custom time range' });
 
     // Fetch data in parallel
     const [currentResponses, competitors, activeBrandConfig] = await Promise.all([
@@ -1994,9 +2079,8 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
 
     // Helper function to build CompetitorDetail
     const buildDetail = (name: string, isBrand: boolean): CompetitorDetail => {
-      const entityResponses = currentResponses.filter(r =>
-        r.text.toLowerCase().includes(name.toLowerCase())
-      );
+      const terms = entityTerms(name, activeBrandConfig?.aliases, isBrand);
+      const entityResponses = currentResponses.filter(r => mentionsEntity(r.text, terms));
 
       const mentions = entityResponses.length;
       const shareOfAnswer = currentResponses.length > 0
@@ -2011,7 +2095,7 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
         const platform = r.platform || 'unknown';
         const existing = platformMentions.get(platform) || { total: 0, mentions: 0 };
         existing.total++;
-        if (r.text.toLowerCase().includes(name.toLowerCase())) {
+        if (mentionsEntity(r.text, terms)) {
           existing.mentions++;
         }
         platformMentions.set(platform, existing);
@@ -2034,22 +2118,34 @@ router.get('/:id/compare', async (req: Request, res: Response) => {
         ? totalScore / Object.keys(platformScores).length
         : 0;
 
+      const trend = isBrand || competitor.initialScore === null
+        ? 0
+        : Math.round((avgScore - competitor.initialScore) * 10) / 10;
+      const citationRate = entityResponses.length > 0
+        ? Math.round((entityResponses.filter(r => hasCitation(r.text)).length / entityResponses.length) * 100)
+        : 0;
+      const highIntent = entityResponses.length > 0
+        ? Math.round((entityResponses.filter(r =>
+            HIGH_INTENT_KEYWORDS.some(keyword => r.prompt?.text?.toLowerCase().includes(keyword))
+          ).length / entityResponses.length) * 100)
+        : 0;
+
       return {
         rank: 0, // Will be set after comparison
         id: isBrand ? 'brand' : name.toLowerCase().replace(/\s+/g, '-'),
         name,
         score: Math.round(avgScore * 10) / 10,
-        trend: Math.round((Math.random() * 10 - 5) * 10) / 10,
+        trend,
         isYou: isBrand,
         topPlatforms,
         rankChange: 0,
         mentions,
-        citationRate: isBrand ? 100 : Math.round(40 + Math.random() * 50),
-        sentimentBonus: Math.floor(Math.random() * 10),
+        citationRate,
+        sentimentBonus: sentimentBonusFor(entityResponses),
         platformCount: Object.keys(platformScores).filter(p => platformScores[p] > 0).length,
         platformScores,
         shareOfAnswer: Math.round(shareOfAnswer * 10) / 10,
-        highIntent: Math.round(Math.random() * 60 + 30),
+        highIntent,
         topPrompt: entityResponses[0]?.prompt?.text?.slice(0, 50) || undefined,
       };
     };
@@ -2222,11 +2318,22 @@ const TIME_RANGE_DAYS: Record<string, number> = {
 router.get('/trends', async (req: Request, res: Response) => {
   try {
     const timeRange = (req.query.timeRange as string) || '30d';
-    const requestedDays = TIME_RANGE_DAYS[timeRange] || 30;
-    const toDate = new Date();
-    const fromDate = timeRange === 'all'
-      ? new Date(2020, 0, 1)
-      : new Date(toDate.getTime() - requestedDays * 24 * 60 * 60 * 1000);
+    const toDate = req.query.endDate ? new Date(String(req.query.endDate)) : new Date();
+    let fromDate: Date;
+    if (timeRange === 'all') {
+      fromDate = new Date(2020, 0, 1);
+    } else if (timeRange === 'custom') {
+      if (!req.query.startDate || !req.query.endDate) {
+        return res.status(400).json({ code: 'INVALID_TIME_RANGE', message: 'Invalid custom time range' });
+      }
+      fromDate = new Date(String(req.query.startDate));
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime()) || toDate <= fromDate) {
+        return res.status(400).json({ code: 'INVALID_TIME_RANGE', message: 'Invalid custom time range' });
+      }
+    } else {
+      const requestedDays = TIME_RANGE_DAYS[timeRange] || 30;
+      fromDate = new Date(toDate.getTime() - requestedDays * 24 * 60 * 60 * 1000);
+    }
     const days = Math.ceil((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000));
 
     // Determine interval based on time range
@@ -2237,6 +2344,8 @@ router.get('/trends', async (req: Request, res: Response) => {
     const brandConfig = await getActiveBrandConfig();
 
     const brandName = brandConfig?.name || await workspaceNameFallback();
+    const aliases = Array.isArray(brandConfig?.aliases) ? brandConfig.aliases as string[] : [];
+    const brandAliases = [brandName, ...aliases].map((alias) => alias.toLowerCase().trim());
 
     // Get competitors from DB
     const dbCompetitors = await storage.getCompetitors();
@@ -2318,13 +2427,15 @@ router.get('/trends', async (req: Request, res: Response) => {
         let mentions = 0;
         let totalResponses = bucketResponses.length;
 
+        const entityLower = entityName.toLowerCase();
         for (const r of bucketResponses) {
-          const text = r.text.toLowerCase();
-          const entityLower = entityName.toLowerCase();
-          // Simple mention detection
-          if (text.includes(entityLower)) {
-            mentions++;
+          if (isBrand) {
+            const mentioned = r.brandMentioned ?? brandAliases.some((alias) => r.text.toLowerCase().includes(alias));
+            if (mentioned) mentions++;
+            continue;
           }
+          const named = r.competitorsMentioned?.some((name) => name.toLowerCase() === entityLower);
+          if (named ?? r.text.toLowerCase().includes(entityLower)) mentions++;
         }
 
         const mentionRate = totalResponses > 0 ? mentions / totalResponses : 0;

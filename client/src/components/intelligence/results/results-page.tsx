@@ -21,7 +21,7 @@ import type { ResearchResults } from '../types';
 interface ResultsPageProps {
   results: ResearchResults;
   onResearchAnother: () => void;
-  onAddAsCompetitor: () => void;
+  onAddAsCompetitor: () => Promise<boolean> | boolean;
   userBrandName?: string;
   userBrandLogo?: string;
 }
@@ -253,12 +253,14 @@ export function ResultsPage({
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
-  const handleAddAsCompetitor = () => {
-    onAddAsCompetitor();
-    toast({
-      title: `${results.brand.name} added to competitors`,
-      description: 'You can now track them on the Overview tab.',
-    });
+  const handleAddAsCompetitor = async () => {
+    const added = await onAddAsCompetitor();
+    if (added) {
+      toast({
+        title: `${results.brand.name} added to competitors`,
+        description: 'You can now track them on the Overview tab.',
+      });
+    }
   };
 
   const handlePrint = useReactToPrint({
@@ -345,7 +347,7 @@ export function ResultsPage({
               </div>
               <div className="text-figma-2xs text-figma-muted">You</div>
             </div>
-            <div className="w-11 h-11 rounded-lg bg-blue-50 border border-figma-blue/20 flex items-center justify-center overflow-hidden">
+            <div className="w-11 h-11 rounded-lg bg-blue-50 border border-[#2462EB33] flex items-center justify-center overflow-hidden">
               {userBrandLogo ? (
                 <img
                   src={userBrandLogo}
@@ -412,6 +414,7 @@ export function ResultsPage({
         {/* Platform Performance */}
         <PlatformPerformanceCard
           platforms={results.platforms}
+          yourResults={results.yourPromptResults}
           targetName={results.brand.name}
           yourName={resolvedBrandName}
           className="border-0 shadow-none"

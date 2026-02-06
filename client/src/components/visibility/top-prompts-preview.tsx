@@ -346,7 +346,10 @@ function TableRow({ prompt }: { prompt: TopPrompt }) {
 
       {/* Position */}
       <div className="col-span-1 flex items-center justify-end">
-        <span className="text-figma-sm text-figma-secondary tabular-nums">
+        <span
+          className="text-figma-sm text-figma-secondary tabular-nums"
+          title={prompt.position === null ? 'No ranking data for this prompt in the selected period' : undefined}
+        >
           {prompt.position ? `#${prompt.position}` : '—'}
         </span>
       </div>

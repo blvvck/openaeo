@@ -2,9 +2,12 @@
 
 import { Router, Request, Response } from 'express';
 import { storage } from '../data';
+import { prisma } from '../prisma';
 import { generateInsights, getTopInsights as getTopInsightsFromGenerator, type Insight as GeneratorInsight } from '../services/analytics/insights-generator';
 import { currentWorkspaceId } from '../context/workspace-context';
+import { getActiveBrandConfig } from '../services/brand-config';
 import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
+import type { InsightStatus } from '@shared/types/insights';
 import type {
   TopInsightsRequest,
   TopInsightsResponse,
@@ -23,6 +26,18 @@ interface CacheEntry {
 
 const insightsCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+async function getInsightStatuses(): Promise<Map<string, InsightStatus>> {
+  const statuses = new Map<string, InsightStatus>();
+  const workspaceId = currentWorkspaceId();
+  if (!workspaceId) return statuses;
+  const rows = await prisma.insight_status.findMany({ where: { workspace_id: workspaceId } });
+  const valid: InsightStatus[] = ['active', 'completed', 'dismissed'];
+  for (const row of rows) {
+    if (valid.includes(row.status as InsightStatus)) statuses.set(row.insight_id, row.status as InsightStatus);
+  }
+  return statuses;
+}
 
 /**
  * Map generator severity to dashboard priority
@@ -50,7 +65,7 @@ function mapCategoryToType(category: string): InsightType {
 /**
  * Transform generator insight to API insight format
  */
-function transformInsight(insight: GeneratorInsight): Insight {
+function transformInsight(insight: GeneratorInsight, statuses: Map<string, InsightStatus>): Insight {
   return {
     id: insight.id,
     type: mapCategoryToType(insight.category),
@@ -60,7 +75,7 @@ function transformInsight(insight: GeneratorInsight): Insight {
     impact: generateImpactStatement(insight),
     action: insight.action || 'Review the data and take appropriate action.',
     createdAt: insight.generatedAt.toISOString(),
-    status: 'active',
+    status: statuses.get(insight.id) ?? 'active',
     relatedData: {
       platforms: insight.platforms,
       competitors: insight.data?.competitorsFound as string[] | undefined,
@@ -75,7 +90,7 @@ function transformInsight(insight: GeneratorInsight): Insight {
 function generateImpactStatement(insight: GeneratorInsight): string {
   switch (insight.category) {
     case 'losing_prompt':
-      return `Could capture ${Math.round(Math.random() * 10 + 5)}% more visibility on this topic`;
+      return 'Review this topic to recover lost visibility';
     case 'content_gap':
       const gap = insight.data?.gap as number || 0;
       return `Closing this gap could improve visibility by ${Math.round(gap * 100)}%`;
@@ -87,7 +102,7 @@ function generateImpactStatement(insight: GeneratorInsight): string {
     case 'competitor_gain':
       return 'Competitor is gaining ground - action recommended';
     case 'opportunity':
-      return `Potential to increase visibility by ${Math.round(Math.random() * 15 + 10)}%`;
+      return 'Expand coverage on this topic to increase visibility';
     case 'success':
       return 'Maintain current strategy - it\'s working well';
     default:
@@ -140,7 +155,7 @@ router.get('/top', async (req: Request, res: Response) => {
     // Fetch responses
     const allResponses = await storage.getResponsesWithPrompts();
     const competitors = await storage.getCompetitors();
-    const brandAnalytics = await storage.getLatestAnalytics();
+    const brandConfig = await getActiveBrandConfig();
 
     // If no data, return empty state
     if (allResponses.length === 0) {
@@ -164,7 +179,7 @@ router.get('/top', async (req: Request, res: Response) => {
     );
 
     // Transform to format expected by insights generator
-    const brandName = brandAnalytics?.topCompetitor || 'Your Brand';
+    const brandName = brandConfig?.name || 'Your Brand';
     const competitorNames = competitors.map(c => c.name);
 
     const currentForGenerator = currentResponses.map(r => ({
@@ -198,8 +213,8 @@ router.get('/top', async (req: Request, res: Response) => {
       previousResponses: previousForGenerator,
     });
 
-    // Transform to API format
-    const apiInsights: Insight[] = topInsights.map(transformInsight);
+    const statuses = await getInsightStatuses();
+    const apiInsights: Insight[] = topInsights.map((insight) => transformInsight(insight, statuses));
 
     const response: TopInsightsResponse = {
       insights: apiInsights,
@@ -232,7 +247,7 @@ router.get('/', async (req: Request, res: Response) => {
     // Fetch responses
     const allResponses = await storage.getResponsesWithPrompts();
     const competitors = await storage.getCompetitors();
-    const brandAnalytics = await storage.getLatestAnalytics();
+    const brandConfig = await getActiveBrandConfig();
 
     // If no data, return empty state
     if (allResponses.length === 0) {
@@ -255,7 +270,7 @@ router.get('/', async (req: Request, res: Response) => {
     );
 
     // Transform to format expected by insights generator
-    const brandName = brandAnalytics?.topCompetitor || 'Your Brand';
+    const brandName = brandConfig?.name || 'Your Brand';
     const competitorNames = competitors.map(c => c.name);
 
     const currentForGenerator = currentResponses.map(r => ({
@@ -278,8 +293,8 @@ router.get('/', async (req: Request, res: Response) => {
       previousResponses: previousForGenerator,
     });
 
-    // Transform to API format
-    let apiInsights: Insight[] = fullAnalysis.insights.map(transformInsight);
+    const statuses = await getInsightStatuses();
+    let apiInsights: Insight[] = fullAnalysis.insights.map((insight) => transformInsight(insight, statuses));
 
     // Apply filters
     if (priority) {
@@ -322,8 +337,16 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       });
     }
 
-    // In a real implementation, this would update a database record
-    // For now, we acknowledge the request (insights are generated on-the-fly)
+    const workspaceId = currentWorkspaceId();
+    if (!workspaceId) {
+      return res.status(400).json({ code: 'NO_WORKSPACE', message: 'No active workspace for this request' });
+    }
+    await prisma.insight_status.upsert({
+      where: { workspace_id_insight_id: { workspace_id: workspaceId, insight_id: id } },
+      create: { workspace_id: workspaceId, insight_id: id, status },
+      update: { status, updated_at: new Date() },
+    });
+    insightsCache.clear();
     res.json({
       success: true,
       message: `Insight ${id} marked as ${status}`,

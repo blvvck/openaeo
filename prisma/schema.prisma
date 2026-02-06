@@ -242,6 +242,17 @@ model intelligence_searches {
   @@index([workspace_id], map: "idx_intelligence_searches_workspace")
 }
 
+model intelligence_reports {
+  workspace_id String   @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  brand_id     String   @db.VarChar(255)
+  domain       String   @db.VarChar(255)
+  results      Json
+  created_at   DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([workspace_id, brand_id, created_at], map: "idx_intelligence_reports_lookup")
+}
+
 model logos {
   domain       String   @id @db.VarChar(255)
   logo_url     String
@@ -473,6 +484,15 @@ model prompts {
   @@index([persona_id], map: "idx_prompts_persona")
   @@index([is_priority], map: "idx_prompts_priority")
   @@index([workspace_id], map: "idx_prompts_workspace")
+}
+
+model insight_status {
+  workspace_id String   @db.Uuid
+  insight_id   String   @db.VarChar(255)
+  status       String   @default("active") @db.VarChar(20)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+
+  @@id([workspace_id, insight_id])
 }
 
 model prompt_tracking_settings {
