@@ -63,6 +63,8 @@ import { CompetitorsPage } from "@/pages/app/competitors";
 import { BotTrafficPage } from "@/pages/app/bot-traffic";
 import { PromptsPage } from "@/pages/app/prompts";
 import { CitationsPage } from "@/pages/app/citations";
+import { TeamSettingsPage } from "@/pages/settings/team";
+import { IntegrationsSettingsPage } from "@/pages/settings/integrations";
 import { EmptyState } from "@/components/shared/empty-state";
 import { GlobalSearch } from "@/components/layout/global-search";
 import { AccountMenu } from "@/components/layout/account-menu";
@@ -476,21 +478,11 @@ function BrandSetupPage() {
 }
 
 function TeamPage() {
-  return (
-    <ComingSoon
-      title="Team"
-      description="Manage team members, roles, and permissions."
-    />
-  );
+  return <TeamSettingsPage />;
 }
 
 function IntegrationsPage() {
-  return (
-    <ComingSoon
-      title="Integrations"
-      description="Connect your tools and configure third-party integrations."
-    />
-  );
+  return <IntegrationsSettingsPage />;
 }
 
 function NotFoundPage() {

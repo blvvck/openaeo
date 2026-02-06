@@ -135,9 +135,11 @@ The full variable list is in `.env.example`. Core settings:
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`, `GOOGLE_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY` | Optional provider API credentials |
 | `ENABLE_SCRAPING` | Set to `true` to enable browser fallback collection |
 | `SCRAPEOPS_API_KEY` | Optional proxy service for scraping retries |
-| `RESEND_API_KEY`, `ALERT_EMAIL_FROM` | Required for email alert channels; the sender must be verified in Resend |
+| `RESEND_API_KEY`, `ALERT_EMAIL_FROM` | Required for email alert channels and workspace invitations; the sender must be verified in Resend |
+| `WORKSPACE_KEY_ENCRYPTION_KEY` | Required to store workspace provider keys; generate a 32-byte key with `openssl rand -base64 32` |
+| `SCAN_MAX_PROMPTS`, `SCAN_MAX_SCANS_PER_HOUR` | Default scan limits; workspace owners and admins can override them in Settings → Integrations |
 
-Store secrets in `.env.local` or the host's secret manager. Do not commit credentials. Slack and webhook alert channels need no email configuration. Email channels fail with a setup error when either Resend variable is missing, so a test or delivery never reports success without sending.
+Store secrets in `.env.local` or the host's secret manager. Do not commit credentials. Slack and webhook alert channels need no email configuration. Email channels and invitations fail with a setup error when either Resend variable is missing, so a test or delivery never reports success without sending. Workspace provider keys are encrypted with `WORKSPACE_KEY_ENCRYPTION_KEY`, are never returned in full, and take precedence over the environment keys above; without that master key, workspace key management is unavailable. Workspace members with the owner or admin role manage keys, scan limits, and invitations in Settings.
 
 ## Deploy on Google Cloud Run
 
