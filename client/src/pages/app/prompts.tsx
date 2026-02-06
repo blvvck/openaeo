@@ -931,7 +931,7 @@ export function PromptsPage() {
   const {
     data: promptDetailData,
     isLoading: detailLoading,
-  } = usePromptDetail(selectedPromptId);
+  } = usePromptDetail(selectedPromptId, range);
 
   // Handlers
   const handleTabChange = (tab: string) => {

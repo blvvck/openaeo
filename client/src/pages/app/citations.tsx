@@ -826,7 +826,7 @@ export function CitationsPage() {
   const {
     data: citationDetailData,
     isLoading: detailLoading,
-  } = useCitationDetail(selectedCitationId);
+  } = useCitationDetail(selectedCitationId, range);
 
   // Handlers
   const handleTabChange = (tab: string) => {

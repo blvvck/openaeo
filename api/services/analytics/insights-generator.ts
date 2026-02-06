@@ -8,6 +8,8 @@
  * - Opportunities (areas to improve)
  */
 
+import { createHash } from "node:crypto";
+
 export type InsightSeverity = 'high' | 'medium' | 'low';
 export type InsightCategory =
   | 'losing_prompt'
@@ -75,11 +77,9 @@ export interface ResponseWithMetrics {
   createdAt?: Date;
 }
 
-/**
- * Generate unique insight ID
- */
-function generateId(): string {
-  return `insight_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+function insightId(category: InsightCategory, parts: string[]): string {
+  const key = [category, ...parts].join('|');
+  return `insight_${createHash('sha256').update(key).digest('hex').slice(0, 16)}`;
 }
 
 /**
@@ -125,7 +125,7 @@ function detectLosingPrompts(
         competitorsFound.length >= 2 ? 'medium' : 'low';
 
       insights.push({
-        id: generateId(),
+        id: insightId('losing_prompt', [brandName, prompt]),
         category: 'losing_prompt',
         severity,
         title: `Missing from "${prompt.slice(0, 50)}..."`,
@@ -173,7 +173,7 @@ function detectContentGaps(
       // Competitor significantly outperforms brand
       if (compRate > brandRate + 0.2 && compRate > 0.3) {
         insights.push({
-          id: generateId(),
+          id: insightId('content_gap', [brandName, platform, comp]),
           category: 'content_gap',
           severity: compRate > 0.6 ? 'high' : compRate > 0.4 ? 'medium' : 'low',
           title: `${comp} dominates on ${platform}`,
@@ -240,7 +240,7 @@ function detectSentimentDrops(
     }
 
     insights.push({
-      id: generateId(),
+      id: insightId('sentiment_drop', [brandName]),
       category: 'sentiment_drop',
       severity: drop > 0.3 ? 'high' : drop > 0.2 ? 'medium' : 'low',
       title: 'Sentiment declining',
@@ -286,7 +286,7 @@ function detectPositionLosses(
 
     if (drop > 10) {
       insights.push({
-        id: generateId(),
+        id: insightId('position_loss', [brandName, platform]),
         category: 'position_loss',
         severity: drop > 25 ? 'high' : drop > 15 ? 'medium' : 'low',
         title: `Position dropped on ${platform}`,
@@ -325,7 +325,7 @@ function detectOpportunities(
     // High mention rate but could be higher
     if (mentionRate >= 0.5 && mentionRate < 0.8) {
       insights.push({
-        id: generateId(),
+        id: insightId('opportunity', [brandName, platform]),
         category: 'opportunity',
         severity: 'low',
         title: `Strong on ${platform} - room to grow`,
@@ -344,7 +344,7 @@ function detectOpportunities(
     // Excellent performance
     if (mentionRate >= 0.8) {
       insights.push({
-        id: generateId(),
+        id: insightId('success', [brandName, platform]),
         category: 'success',
         severity: 'low',
         title: `Excellent visibility on ${platform}`,

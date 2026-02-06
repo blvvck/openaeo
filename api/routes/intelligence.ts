@@ -1080,6 +1080,17 @@ function buildPlatformResults(
 ): PlatformResult[] {
   return platformIds.map((platformId) => {
     const platformResponses = responses.filter((r) => r.platformId === platformId && r.response.success);
+    if (platformResponses.length === 0) {
+      return {
+        id: platformId,
+        name: getPlatformDisplayName(platformId),
+        isActive: false,
+        score: 0,
+        mentions: 0,
+        sentiment: null,
+        citationRate: null,
+      };
+    }
     const totalMentions = platformResponses.filter((r) =>
       r.response.text.toLowerCase().includes(brandName.toLowerCase())
     ).length;
@@ -1094,9 +1105,7 @@ function buildPlatformResults(
         citation.context.toLowerCase().includes(brandName.toLowerCase())
       );
     });
-    const citationRate = platformResponses.length > 0
-      ? Math.round((responsesWithCitations.length / platformResponses.length) * 100)
-      : null;
+    const citationRate = Math.round((responsesWithCitations.length / platformResponses.length) * 100);
     const score = Math.min(100, Math.round(
       (totalMentions / promptCount) * 50 +
       ((avgSentiment + 1) / 2) * 30 +

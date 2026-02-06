@@ -10,6 +10,12 @@ import { ContentCard } from '@/components/shared';
 import { PlatformIcon } from '@/components/ui/platform-icon';
 import type { PlatformResult, PromptResult } from '../types';
 
+function sentimentFrom(values: number[]): 'positive' | 'mixed' | 'negative' | null {
+  if (values.length === 0) return null;
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return average > 0.2 ? 'positive' : average < -0.2 ? 'negative' : 'mixed';
+}
+
 export function yourPlatformMetrics(results: PromptResult[] | undefined, platformId: string): PlatformMetrics {
   const entries = (results ?? []).flatMap((prompt) => prompt.results)
     .filter((entry) => entry.platformId === platformId);
@@ -23,12 +29,17 @@ export function yourPlatformMetrics(results: PromptResult[] | undefined, platfor
     .map((value) => value === 'positive' ? 1 : value === 'negative' ? -1 : 0);
   const average = sentimentValues.length > 0
     ? sentimentValues.reduce((sum, value) => sum + value, 0) / sentimentValues.length
-    : null;
+    : 0;
+  const citationRate = Math.round((citations / entries.length) * 100);
   return {
-    score: Math.round((mentions / entries.length) * 100),
+    score: Math.min(100, Math.round(
+      (mentions / entries.length) * 50 +
+      ((average + 1) / 2) * 30 +
+      citationRate * 0.2
+    )),
     mentions,
-    citationRate: Math.round((citations / entries.length) * 100),
-    sentiment: average === null ? null : average > 0.33 ? 'positive' : average < -0.33 ? 'negative' : 'mixed',
+    citationRate,
+    sentiment: sentimentFrom(sentimentValues),
   };
 }
 

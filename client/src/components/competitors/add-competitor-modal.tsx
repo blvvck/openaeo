@@ -54,6 +54,7 @@ interface PlatformScanResult {
   found: boolean;
   score: number;
   progress: number; // 0-100
+  available?: boolean;
 }
 
 interface WizardState {
@@ -231,11 +232,17 @@ async function* scanPlatforms(
   }
 
   const payload = await response.json() as {
-    platforms: Array<{ platformId: string; found: boolean; score: number }>;
+    platforms: Array<{ platformId: string; found: boolean; score: number; available?: boolean }>;
   };
   for (const result of payload.platforms) {
     onProgress(result.platformId, 100);
-    yield { platformId: result.platformId, found: result.found, score: result.score, progress: 100 };
+    yield {
+      platformId: result.platformId,
+      found: result.found,
+      score: result.score,
+      progress: 100,
+      available: result.available,
+    };
   }
 }
 
@@ -696,9 +703,12 @@ function ScanStep({ state, onUpdate, onNext, onBack, onCancel }: StepProps) {
           onUpdate({ scanResults: new Map(results) });
         }
 
-        // Calculate final score
-        const scores = Array.from(results.values()).map(r => r.score);
-        const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        const scores = Array.from(results.values())
+          .filter((result) => result.available !== false)
+          .map((result) => result.score);
+        const avgScore = scores.length > 0
+          ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+          : 0;
         onUpdate({ finalScore: avgScore });
 
       } catch (error) {

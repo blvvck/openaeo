@@ -63,12 +63,14 @@ export function useCitations(params: {
   });
 }
 
-export function useCitationDetail(citationId: string | null) {
+export function useCitationDetail(citationId: string | null, range?: TimeRange) {
   return useQuery<CitationDetailResponse>({
-    queryKey: ['citations', 'detail', citationId],
+    queryKey: ['citations', 'detail', citationId, timeRangeQuery(range)],
     queryFn: async () => {
       if (!citationId) throw new Error('No citation selected');
-      const res = await workspaceFetch(`/api/citations/${encodeURIComponent(citationId)}`);
+      const params = timeRangeParams(range);
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const res = await workspaceFetch(`/api/citations/${encodeURIComponent(citationId)}${suffix}`);
       if (!res.ok) throw new Error('Failed to load citation detail');
       return res.json();
     },

@@ -20,7 +20,7 @@ describe("yourPlatformMetrics", () => {
     ];
 
     expect(yourPlatformMetrics(results, "chatgpt")).toEqual({
-      score: 50,
+      score: 65,
       mentions: 1,
       citationRate: 50,
       sentiment: 'positive',

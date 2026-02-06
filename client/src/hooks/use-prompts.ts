@@ -138,12 +138,14 @@ export function useTopics() {
   });
 }
 
-export function usePromptDetail(promptId: string | null) {
+export function usePromptDetail(promptId: string | null, range?: TimeRange) {
   return useQuery<PromptDetailResponse>({
-    queryKey: ['discovery', 'prompt', promptId],
+    queryKey: ['discovery', 'prompt', promptId, timeRangeQuery(range)],
     queryFn: async () => {
       if (!promptId) throw new Error('No prompt selected');
-      const res = await workspaceFetch(`/api/discovery/prompts/${encodeURIComponent(promptId)}`);
+      const params = timeRangeParams(range);
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const res = await workspaceFetch(`/api/discovery/prompts/${encodeURIComponent(promptId)}${suffix}`);
       if (!res.ok) throw new Error('Failed to load prompt detail');
       return res.json();
     },
