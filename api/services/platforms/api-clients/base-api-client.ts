@@ -4,6 +4,8 @@
  */
 
 import { PlatformName, PlatformResponse, Citation, TokenUsage, calculateCost } from '../types';
+import { getWorkspaceProviderKey } from '../../auth/workspace-admin';
+import type { Provider } from '@shared/types/workspace-admin';
 
 /**
  * System prompt to encourage LLMs to include citations
@@ -69,10 +71,14 @@ export abstract class BaseApiClient {
      */
     abstract getApiKey(): string | undefined;
 
+    protected async resolveWorkspaceKey(provider: Provider, apiKey?: string): Promise<string | undefined> {
+        return apiKey ?? await getWorkspaceProviderKey(provider) ?? this.getApiKey();
+    }
+
     /**
      * Query the LLM API with a prompt
      */
-    abstract query(prompt: string): Promise<PlatformResponse>;
+    abstract query(prompt: string, apiKey?: string): Promise<PlatformResponse>;
 
     /**
      * Call with retry and exponential backoff
@@ -93,7 +99,6 @@ export abstract class BaseApiClient {
                 // Handle rate limits (429) with retry-after
                 if (error.status === 429 || error.code === 'rate_limit_exceeded') {
                     const retryAfter = error.headers?.['retry-after'] || Math.pow(2, attempt);
-                    console.log(`[${this.name}] Rate limited. Waiting ${retryAfter}s... (attempt ${attempt}/${maxRetries})`);
                     await sleep(Number(retryAfter) * 1000);
                     continue;
                 }
@@ -101,7 +106,6 @@ export abstract class BaseApiClient {
                 // Exponential backoff for transient errors
                 if (attempt < maxRetries) {
                     const delay = Math.pow(2, attempt) * 1000;
-                    console.log(`[${this.name}] Error: ${error.message}. Retrying in ${delay}ms... (attempt ${attempt}/${maxRetries})`);
                     await sleep(delay);
                     continue;
                 }

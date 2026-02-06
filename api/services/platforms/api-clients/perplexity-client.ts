@@ -16,30 +16,23 @@ export class PerplexityClient extends BaseApiClient {
     name = 'perplexity' as const;
 
     private model = process.env.PERPLEXITY_MODEL || 'sonar';
-    private client: OpenAI | null = null;
-
-    private getClient(): OpenAI {
-        if (!this.client) {
-            this.client = new OpenAI({
-                apiKey: this.getApiKey(),
-                baseURL: 'https://api.perplexity.ai'
-            });
-        }
-        return this.client;
+    private getClient(apiKey = this.getApiKey()): OpenAI {
+        return new OpenAI({ apiKey, baseURL: 'https://api.perplexity.ai' });
     }
 
     getApiKey(): string | undefined {
         return process.env.PERPLEXITY_API_KEY;
     }
 
-    async query(prompt: string): Promise<PlatformResponse> {
-        if (!this.isAvailable()) {
+    async query(prompt: string, apiKey?: string): Promise<PlatformResponse> {
+        const resolvedKey = await this.resolveWorkspaceKey('perplexity', apiKey);
+        if (!resolvedKey) {
             return this.createErrorResponse(new Error('PERPLEXITY_API_KEY not configured'));
         }
 
         try {
             const response = await this.callWithRetry(async () => {
-                return this.getClient().chat.completions.create({
+                return this.getClient(resolvedKey).chat.completions.create({
                     model: this.model,
                     messages: [
                         { role: 'system', content: SYSTEM_PROMPT },

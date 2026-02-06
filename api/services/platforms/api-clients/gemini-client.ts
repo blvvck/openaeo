@@ -12,22 +12,19 @@ export class GeminiClient extends BaseApiClient {
     name = 'gemini' as const;
 
     private model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-    private genAI: GoogleGenerativeAI | null = null;
     private enableGrounding = process.env.GEMINI_GROUNDING !== 'false';
 
-    private getGenAI(): GoogleGenerativeAI {
-        if (!this.genAI) {
-            this.genAI = new GoogleGenerativeAI(this.getApiKey() || '');
-        }
-        return this.genAI;
+    private getGenAI(apiKey = this.getApiKey()): GoogleGenerativeAI {
+        return new GoogleGenerativeAI(apiKey || '');
     }
 
     getApiKey(): string | undefined {
         return process.env.GOOGLE_API_KEY;
     }
 
-    async query(prompt: string): Promise<PlatformResponse> {
-        if (!this.isAvailable()) {
+    async query(prompt: string, apiKey?: string): Promise<PlatformResponse> {
+        const resolvedKey = await this.resolveWorkspaceKey('gemini', apiKey);
+        if (!resolvedKey) {
             return this.createErrorResponse(new Error('GOOGLE_API_KEY not configured'));
         }
 
@@ -50,7 +47,7 @@ export class GeminiClient extends BaseApiClient {
                     }];
                 }
 
-                const model = this.getGenAI().getGenerativeModel(modelConfig);
+                const model = this.getGenAI(resolvedKey).getGenerativeModel(modelConfig);
                 return model.generateContent(prompt);
             });
 

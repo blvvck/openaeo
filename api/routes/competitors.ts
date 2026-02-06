@@ -16,7 +16,8 @@ import type { TimeRangePreset, CompetitorMetricsResponse } from '@shared/types';
 import { currentWorkspaceId } from '../context/workspace-context';
 import { prismaRoot } from '../prisma';
 import { workspaceCacheKey } from '../services/analytics/workspace-cache-key';
-import { getClient, hasApiAccess } from '../services/platforms/api-clients';
+import { getClient } from '../services/platforms/api-clients';
+import { getWorkspaceProviderKey, scanQuotaExceeded, WorkspaceAdminService } from '../services/auth/workspace-admin';
 import type { PlatformName } from '../services/platforms/types';
 
 async function workspaceNameFallback(): Promise<string> {
@@ -49,6 +50,7 @@ function sentimentBonusFor(responses: Array<{ text: string }>): number {
 }
 
 const router = Router();
+const workspaceAdmin = new WorkspaceAdminService();
 
 // OpenAI client for LLM calls (used for prompt discovery)
 const openai = new OpenAI({
@@ -666,6 +668,10 @@ const PLATFORM_NAME_BY_ID: Record<string, PlatformName> = {
   'ai-overview': 'google-ai-overview',
 };
 
+const PROVIDER_BY_PLATFORM: Partial<Record<PlatformName, 'openai' | 'anthropic' | 'perplexity' | 'gemini' | 'xai' | 'deepseek'>> = {
+  chatgpt: 'openai', claude: 'anthropic', perplexity: 'perplexity', gemini: 'gemini', grok: 'xai', deepseek: 'deepseek',
+};
+
 async function scanRealPlatforms(
   company: string,
   prompts: string[]
@@ -677,7 +683,9 @@ async function scanRealPlatforms(
 
   for (const platform of AI_PLATFORMS) {
     const name = PLATFORM_NAME_BY_ID[platform.id];
-    if (!name || !hasApiAccess(name)) {
+    const provider = name ? PROVIDER_BY_PLATFORM[name] : undefined;
+    const apiKey = provider ? await getWorkspaceProviderKey(provider) : undefined;
+    if (!name || !apiKey) {
       missing.push(platform.name);
       results.push({ platformId: platform.id, found: false, score: 0, available: false });
       continue;
@@ -686,10 +694,10 @@ async function scanRealPlatforms(
     let mentions = 0;
     let calls = 0;
     let error: string | undefined;
-    for (const prompt of prompts.slice(0, 5)) {
+    for (const prompt of prompts) {
       calls++;
       try {
-        const response = await client.query(prompt);
+        const response = await client.query(prompt, apiKey);
         if (response.success && terms.some((term) => response.text.toLowerCase().includes(term))) mentions++;
       } catch (cause) {
         error = cause instanceof Error ? cause.message : String(cause);
@@ -781,12 +789,26 @@ router.post('/scan-platforms', async (req: Request, res: Response) => {
   try {
     const parsed = z.object({
       company: z.string().min(1),
-      prompts: z.array(z.string().min(1)).min(1).max(10),
+      prompts: z.array(z.string().min(1)).min(1),
     }).safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ code: 'INVALID_REQUEST', details: parsed.error.flatten().fieldErrors });
     }
-    const scan = await scanRealPlatforms(parsed.data.company, parsed.data.prompts);
+    if (!await workspaceAdmin.hasProviderKey()) {
+      const missing = AI_PLATFORMS.map((platform) => platform.name);
+      return res.status(400).json({
+        code: 'PLATFORM_API_KEY_MISSING',
+        message: `No provider API keys are configured. Set them in .env.local or Settings → Integrations before scanning: ${missing.join(', ')}.`,
+        missingPlatforms: missing,
+      });
+    }
+    const quota = await workspaceAdmin.getQuota();
+    await workspaceAdmin.lockScanQuota();
+    const used = await workspaceAdmin.countScansSince(new Date(Date.now() - 60 * 60 * 1000));
+    if (scanQuotaExceeded(used, quota.maxScansPerHour)) {
+      return res.status(429).json({ code: 'SCAN_QUOTA_EXCEEDED', message: 'Workspace scan quota exceeded for this hour.' });
+    }
+    const scan = await scanRealPlatforms(parsed.data.company, parsed.data.prompts.slice(0, quota.maxPromptsPerScan));
     if (scan.missing.length === scan.results.length) {
       return res.status(400).json({
         code: 'PLATFORM_API_KEY_MISSING',
@@ -794,6 +816,7 @@ router.post('/scan-platforms', async (req: Request, res: Response) => {
         missingPlatforms: scan.missing,
       });
     }
+    await workspaceAdmin.recordScan();
     res.json({ platforms: scan.results, missingPlatforms: scan.missing });
   } catch (error) {
     console.error('[Competitors] Real platform scan failed:', error);
@@ -813,7 +836,7 @@ router.post('/scan-platforms', async (req: Request, res: Response) => {
  * - complete: all done
  * - error: something went wrong
  */
-router.post('/discover', async (req, res) => {
+async function discoverRoute(req: Request, res: Response) {
   // Validate request
   const validation = discoverRequestSchema.safeParse(req.body);
   if (!validation.success) {
@@ -924,7 +947,7 @@ router.post('/discover', async (req, res) => {
 
     // Step 4: Scan platforms (only if prompts selected)
     if (selectedPromptIds && selectedPromptIds.length > 0) {
-      const scan = await scanRealPlatforms(company.name, selectedPromptIds);
+      const scan = await scanRealPlatforms(company.name, selectedPromptIds.slice(0, 5));
       if (scan.missing.length === scan.results.length) {
         sendEvent('error', {
           code: 'PLATFORM_API_KEY_MISSING',
@@ -968,7 +991,8 @@ router.post('/discover', async (req, res) => {
     });
     res.end();
   }
-});
+}
+router.post('/discover', discoverRoute);
 
 // =============================================================================
 // Simple Competitor Creation (for Intelligence Wizard "Add as Competitor" button)
@@ -985,7 +1009,7 @@ const simpleAddCompetitorSchema = z.object({
   logo: z.string().url().optional().nullable(),
 });
 
-router.post('/', async (req, res) => {
+async function simpleAddRoute(req: Request, res: Response) {
   const validation = simpleAddCompetitorSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({
@@ -1039,13 +1063,14 @@ router.post('/', async (req, res) => {
       code: 'SERVER_ERROR',
     });
   }
-});
+}
+router.post('/', simpleAddRoute);
 
 /**
  * POST /api/competitors/add
  * Save a discovered competitor after wizard completes
  */
-router.post('/add', async (req, res) => {
+async function addRoute(req: Request, res: Response) {
   const validation = addCompetitorSchema.safeParse(req.body);
   if (!validation.success) {
     return res.status(400).json({
@@ -1124,7 +1149,8 @@ router.post('/add', async (req, res) => {
       code: 'SERVER_ERROR',
     });
   }
-});
+}
+router.post('/add', addRoute);
 
 // =============================================================================
 // Competitor Metrics Endpoint

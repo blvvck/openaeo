@@ -10,29 +10,23 @@ export class OpenAIClient extends BaseApiClient {
     name = 'chatgpt' as const;
 
     private model = process.env.OPENAI_MODEL || 'gpt-4o';
-    private client: OpenAI | null = null;
-
-    private getClient(): OpenAI {
-        if (!this.client) {
-            this.client = new OpenAI({
-                apiKey: this.getApiKey()
-            });
-        }
-        return this.client;
+    private getClient(apiKey = this.getApiKey()): OpenAI {
+        return new OpenAI({ apiKey });
     }
 
     getApiKey(): string | undefined {
         return process.env.OPENAI_API_KEY;
     }
 
-    async query(prompt: string): Promise<PlatformResponse> {
-        if (!this.isAvailable()) {
+    async query(prompt: string, apiKey?: string): Promise<PlatformResponse> {
+        const resolvedKey = await this.resolveWorkspaceKey('openai', apiKey);
+        if (!resolvedKey) {
             return this.createErrorResponse(new Error('OPENAI_API_KEY not configured'));
         }
 
         try {
             const response = await this.callWithRetry(async () => {
-                return this.getClient().chat.completions.create({
+                return this.getClient(resolvedKey).chat.completions.create({
                     model: this.model,
                     messages: [
                         { role: 'system', content: SYSTEM_PROMPT },

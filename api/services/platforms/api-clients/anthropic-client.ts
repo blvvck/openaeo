@@ -10,29 +10,23 @@ export class AnthropicClient extends BaseApiClient {
     name = 'claude' as const;
 
     private model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514';
-    private client: Anthropic | null = null;
-
-    private getClient(): Anthropic {
-        if (!this.client) {
-            this.client = new Anthropic({
-                apiKey: this.getApiKey()
-            });
-        }
-        return this.client;
+    private getClient(apiKey = this.getApiKey()): Anthropic {
+        return new Anthropic({ apiKey });
     }
 
     getApiKey(): string | undefined {
         return process.env.ANTHROPIC_API_KEY;
     }
 
-    async query(prompt: string): Promise<PlatformResponse> {
-        if (!this.isAvailable()) {
+    async query(prompt: string, apiKey?: string): Promise<PlatformResponse> {
+        const resolvedKey = await this.resolveWorkspaceKey('anthropic', apiKey);
+        if (!resolvedKey) {
             return this.createErrorResponse(new Error('ANTHROPIC_API_KEY not configured'));
         }
 
         try {
             const response = await this.callWithRetry(async () => {
-                return this.getClient().messages.create({
+                return this.getClient(resolvedKey).messages.create({
                     model: this.model,
                     max_tokens: 2048,
                     system: SYSTEM_PROMPT,

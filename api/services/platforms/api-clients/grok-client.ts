@@ -10,30 +10,23 @@ export class GrokClient extends BaseApiClient {
     name = 'grok' as const;
 
     private model = process.env.GROK_MODEL || 'grok-3-mini';
-    private client: OpenAI | null = null;
-
-    private getClient(): OpenAI {
-        if (!this.client) {
-            this.client = new OpenAI({
-                apiKey: this.getApiKey(),
-                baseURL: 'https://api.x.ai/v1'
-            });
-        }
-        return this.client;
+    private getClient(apiKey = this.getApiKey()): OpenAI {
+        return new OpenAI({ apiKey, baseURL: 'https://api.x.ai/v1' });
     }
 
     getApiKey(): string | undefined {
         return process.env.XAI_API_KEY;
     }
 
-    async query(prompt: string): Promise<PlatformResponse> {
-        if (!this.isAvailable()) {
+    async query(prompt: string, apiKey?: string): Promise<PlatformResponse> {
+        const resolvedKey = await this.resolveWorkspaceKey('xai', apiKey);
+        if (!resolvedKey) {
             return this.createErrorResponse(new Error('XAI_API_KEY not configured'));
         }
 
         try {
             const response = await this.callWithRetry(async () => {
-                return this.getClient().chat.completions.create({
+                return this.getClient(resolvedKey).chat.completions.create({
                     model: this.model,
                     messages: [
                         { role: 'system', content: SYSTEM_PROMPT },
