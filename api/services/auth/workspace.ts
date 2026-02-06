@@ -132,19 +132,29 @@ export class WorkspaceService {
   }
 
   async updateMemberRole(workspaceId: string, userId: string, role: WorkspaceRole): Promise<void> {
-    const where = { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } };
-    const current = await prisma.workspace_members.findUnique({ where, select: { role: true } });
+    const where = { workspace_id: workspaceId, user_id: userId, role: { not: "owner" } };
+    const result = await prisma.workspace_members.updateMany({ where, data: { role } });
+    if (result.count) return;
+    const current = await prisma.workspace_members.findUnique({
+      where: { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } },
+      select: { role: true },
+    });
     if (!current) throw new Error(`User ${userId} is not a member of workspace ${workspaceId}`);
     if (current.role === "owner") throw new Error("Cannot change owner role. Transfer ownership first.");
-    await prisma.workspace_members.update({ where, data: { role } });
+    throw new Error("Member role update did not apply");
   }
 
   async removeMember(workspaceId: string, userId: string): Promise<void> {
-    const where = { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } };
-    const member = await prisma.workspace_members.findUnique({ where, select: { role: true } });
+    const where = { workspace_id: workspaceId, user_id: userId, role: { not: "owner" } };
+    const result = await prisma.workspace_members.deleteMany({ where });
+    if (result.count) return;
+    const member = await prisma.workspace_members.findUnique({
+      where: { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } },
+      select: { role: true },
+    });
     if (!member) throw new Error(`User ${userId} is not a member of workspace ${workspaceId}`);
     if (member.role === "owner") throw new Error("Cannot remove workspace owner. Transfer ownership first.");
-    await prisma.workspace_members.delete({ where });
+    throw new Error("Member removal did not apply");
   }
 
   async transferOwnership(workspaceId: string, currentOwnerId: string, newOwnerId: string): Promise<void> {

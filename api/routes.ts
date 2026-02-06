@@ -32,6 +32,7 @@ import citationsRoutes from "./routes/citations";
 import siteHealthRoutes from "./routes/site-health";
 import searchRoutes from "./routes/search";
 import cdnWebhooksRoutes from "./routes/webhooks/cdn";
+import workspaceAdminRoutes from "./routes/workspace-admin";
 import { getPriorityManager } from "./services/refresh/priority-manager";
 import { getRefreshHistoryService } from "./services/refresh/refresh-history";
 import { currentWorkspaceId, runInWorkspace } from "./context/workspace-context";
@@ -57,6 +58,7 @@ function progressKey(workspaceId: string, sessionId: string): string {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.use("/api", workspaceAdminRoutes);
   app.get("/api/workspaces", withApiFailure("Failed to fetch workspaces", async (request, response) => {
     const { userId } = getAuth(request);
     if (!userId) {

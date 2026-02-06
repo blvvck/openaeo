@@ -503,6 +503,55 @@ model prompt_tracking_settings {
   updated_at       DateTime  @default(now()) @db.Timestamp(6)
 }
 
+model workspace_invitations {
+  workspace_id String    @db.Uuid
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @db.VarChar(255)
+  role         String    @db.VarChar(20)
+  token_hash   String    @unique(map: "workspace_invitations_token_hash_key") @db.VarChar(64)
+  expires_at   DateTime  @db.Timestamp(6)
+  sent_at      DateTime  @default(now()) @db.Timestamp(6)
+  status       String    @default("invited") @db.VarChar(20)
+  reminded_at  DateTime? @db.Timestamp(6)
+  canceled_at  DateTime? @db.Timestamp(6)
+  accepted_at  DateTime? @db.Timestamp(6)
+  invited_by   String    @db.VarChar(255)
+  users        users     @relation("workspace_invitations_invited_by_users", fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspace_id, email], map: "idx_workspace_invitations_workspace_email")
+  @@index([workspace_id, expires_at], map: "idx_workspace_invitations_workspace_expires")
+}
+
+model workspace_provider_keys {
+  workspace_id String   @db.Uuid
+  provider     String   @db.VarChar(20)
+  encrypted_key String  @db.Text
+  iv           String   @db.VarChar(32)
+  auth_tag     String   @db.VarChar(32)
+  updated_at   DateTime @default(now()) @db.Timestamp(6)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([workspace_id, provider])
+}
+
+model workspace_integration_settings {
+  workspace_id       String   @id @db.Uuid
+  max_prompts_per_scan Int?
+  max_scans_per_hour   Int?
+  updated_at          DateTime @default(now()) @db.Timestamp(6)
+  workspaces           workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model workspace_scan_usage {
+  workspace_id String   @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scanned_at   DateTime @default(now()) @db.Timestamp(6)
+  workspaces   workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([workspace_id, scanned_at], map: "idx_workspace_scan_usage_hourly")
+}
+
 model quality_aggregates {
   workspace_id           String    @db.Uuid
   id                     Int       @id @default(autoincrement())
@@ -879,6 +928,7 @@ model users {
   workspace_members_workspace_members_invited_byTousers workspace_members[] @relation("workspace_members_invited_byTousers")
   workspace_members_workspace_members_user_idTousers    workspace_members[] @relation("workspace_members_user_idTousers")
   workspaces                                            workspaces[]
+  workspace_invitations workspace_invitations[] @relation("workspace_invitations_invited_by_users")
 }
 
 model variant_performance {
@@ -900,6 +950,7 @@ model workspace_members {
   workspace_id                              String     @db.Uuid
   user_id                                   String     @db.VarChar(255)
   role                                      String     @default("member") @db.VarChar(20)
+  status                                    String     @default("active") @db.VarChar(20)
   invited_by                                String?    @db.VarChar(255)
   joined_at                                 DateTime?  @default(now()) @db.Timestamp(6)
   users_workspace_members_invited_byTousers users?     @relation("workspace_members_invited_byTousers", fields: [invited_by], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "workspace_members_invited_by_users_id_fk")
@@ -923,6 +974,10 @@ model workspaces {
   created_at        DateTime?           @default(now()) @db.Timestamp(6)
   updated_at        DateTime?           @default(now()) @db.Timestamp(6)
   workspace_members workspace_members[]
+  workspace_invitations workspace_invitations[]
+  workspace_provider_keys workspace_provider_keys[]
+  workspace_integration_settings workspace_integration_settings?
+  workspace_scan_usage workspace_scan_usage[]
   users             users               @relation(fields: [owner_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "workspaces_owner_id_users_id_fk")
 
   @@index([owner_id], map: "idx_workspaces_owner")

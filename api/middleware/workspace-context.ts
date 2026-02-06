@@ -119,7 +119,7 @@ export async function workspaceContextMiddleware(
   res: Response,
   next: NextFunction,
 ) {
-  if (req.path === "/test" || req.path.startsWith("/webhooks/cdn") || req.path.startsWith("/export/public/")) {
+  if (req.path === "/test" || req.path.startsWith("/webhooks/cdn") || req.path.startsWith("/export/public/") || /^\/invitations\/[^/]+\/accept\/?$/.test(req.path)) {
     next();
     return;
   }
@@ -138,7 +138,8 @@ export async function workspaceContextMiddleware(
       console.info(`[perf] workspace resolve ${resolveMs}ms ${req.method} ${req.originalUrl}`);
     }
 
-    const requestedWorkspaceId = req.header("x-workspace-id");
+    const workspacePath = req.originalUrl.match(/^\/api\/workspaces\/([^/?]+)/)?.[1];
+    const requestedWorkspaceId = workspacePath ? decodeURIComponent(workspacePath) : req.header("x-workspace-id");
     const workspace = requestedWorkspaceId
       ? workspaces.find((candidate) => candidate.id === requestedWorkspaceId)
       : workspaces[0];
@@ -156,16 +157,28 @@ export async function workspaceContextMiddleware(
       return;
     }
 
-    res.setHeader("X-Workspace-Id", workspace.id);
-    await runInWorkspaceTransaction(prismaRoot, workspace.id, () => new Promise<void>((resolve, reject) => {
-      res.once("finish", resolve);
-      res.once("close", resolve);
-      try {
-        next();
-      } catch (error) {
-        reject(error);
-      }
-    }));
+    let activeMember = false;
+    await runInWorkspaceTransaction(prismaRoot, workspace.id, async () => {
+      const membership = await prisma.workspace_members.findUnique({
+        where: { workspace_id_user_id: { workspace_id: workspace.id, user_id: userId } },
+        select: { status: true },
+      });
+      if (membership?.status !== "active") return;
+      activeMember = true;
+      res.setHeader("X-Workspace-Id", workspace.id);
+      await new Promise<void>((resolve, reject) => {
+        res.once("finish", resolve);
+        res.once("close", resolve);
+        try {
+          next();
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    if (!activeMember && !res.headersSent) {
+      res.status(403).json({ error: "Workspace access denied", code: "WORKSPACE_ACCESS_DENIED" });
+    }
   } catch (error) {
     console.error("[Workspace] Context resolution failed:", error);
     if (!res.headersSent) {

@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     $transaction: vi.fn(),
     workspaces: { findFirst: vi.fn(), updateMany: vi.fn() },
-    workspace_members: { count: vi.fn(), findUnique: vi.fn() },
+    workspace_members: { count: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
   },
 }));
 
@@ -54,6 +54,27 @@ describe('WorkspaceService', () => {
     await expect(service.getById('3e8b9847-5c45-4e3b-aac2-cc80009ae66b')).resolves.toBeNull();
     expect(mocks.prisma.workspaces.findFirst).toHaveBeenCalledWith({
       where: { id: '3e8b9847-5c45-4e3b-aac2-cc80009ae66b', deleted_at: null },
+    });
+  });
+
+  it('does not change the owner role', async () => {
+    mocks.prisma.workspace_members.updateMany.mockResolvedValue({ count: 0 });
+    mocks.prisma.workspace_members.findUnique.mockResolvedValue({ role: 'owner' });
+
+    await expect(service.updateMemberRole('workspace-id', 'owner-id', 'member')).rejects.toThrow('Cannot change owner role');
+    expect(mocks.prisma.workspace_members.updateMany).toHaveBeenCalledWith({
+      where: { workspace_id: 'workspace-id', user_id: 'owner-id', role: { not: 'owner' } },
+      data: { role: 'member' },
+    });
+  });
+
+  it('does not remove the owner', async () => {
+    mocks.prisma.workspace_members.deleteMany.mockResolvedValue({ count: 0 });
+    mocks.prisma.workspace_members.findUnique.mockResolvedValue({ role: 'owner' });
+
+    await expect(service.removeMember('workspace-id', 'owner-id')).rejects.toThrow('Cannot remove workspace owner');
+    expect(mocks.prisma.workspace_members.deleteMany).toHaveBeenCalledWith({
+      where: { workspace_id: 'workspace-id', user_id: 'owner-id', role: { not: 'owner' } },
     });
   });
 });

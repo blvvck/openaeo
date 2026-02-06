@@ -15,6 +15,9 @@ import {
   type WorkspaceRequest,
 } from './tenant-isolation';
 import { getWorkspaceService, resetWorkspaceService } from '../services/auth/workspace';
+import { prisma } from '../prisma';
+
+vi.mock('../prisma', () => ({ prisma: { workspace_members: { findUnique: vi.fn() } } }));
 
 // Mock the workspace service
 vi.mock('../services/auth/workspace', () => ({
@@ -63,6 +66,7 @@ describe('Tenant Isolation Middleware', () => {
     };
 
     vi.mocked(getWorkspaceService).mockReturnValue(mockWorkspaceService as any);
+    vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'member', status: 'active' } as any);
   });
 
   afterEach(() => {
@@ -107,7 +111,6 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-from-param' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('member');
 
         await requireWorkspace()(req, res, next);
 
@@ -124,7 +127,6 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-from-query' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('admin');
 
         await requireWorkspace()(req, res, next);
 
@@ -141,7 +143,6 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-from-header' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('owner');
 
         await requireWorkspace()(req, res, next);
 
@@ -160,7 +161,6 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-param' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('member');
 
         await requireWorkspace()(req, res, next);
 
@@ -213,7 +213,7 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-        mockWorkspaceService.getUserRole.mockResolvedValue(null);
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue(null as any);
 
         await requireWorkspace()(req, res, next);
 
@@ -236,7 +236,7 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('owner');
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'owner', status: 'active' } as any);
 
         await requireWorkspace()(req, res, next);
 
@@ -257,7 +257,7 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('admin');
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'admin', status: 'active' } as any);
 
         await requireWorkspace()(req, res, next);
 
@@ -273,7 +273,7 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('member');
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'member', status: 'active' } as any);
 
         await requireWorkspace()(req, res, next);
 
@@ -289,7 +289,7 @@ describe('Tenant Isolation Middleware', () => {
         const next = mockNext();
 
         mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-        mockWorkspaceService.getUserRole.mockResolvedValue('viewer');
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'viewer', status: 'active' } as any);
 
         await requireWorkspace()(req, res, next);
 
@@ -315,6 +315,20 @@ describe('Tenant Isolation Middleware', () => {
           error: 'Internal server error',
           code: TENANT_ERROR_CODES.INTERNAL_ERROR,
         });
+      });
+
+      it('blocks a deactivated member from workspace access', async () => {
+        const req = mockRequest({ auth: { userId: 'user-123' }, params: { workspaceId: 'ws-123' } });
+        const res = mockResponse();
+        const next = mockNext();
+        mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
+        vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'member', status: 'deactivated' } as any);
+
+        await requireWorkspace()(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Access denied to this workspace', code: TENANT_ERROR_CODES.WORKSPACE_ACCESS_DENIED });
+        expect(next).not.toHaveBeenCalled();
       });
     });
   });
@@ -367,7 +381,7 @@ describe('Tenant Isolation Middleware', () => {
       const next = mockNext();
 
       mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-      mockWorkspaceService.getUserRole.mockResolvedValue(null);
+      vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue(null as any);
 
       await optionalWorkspace()(req, res, next);
 
@@ -384,7 +398,7 @@ describe('Tenant Isolation Middleware', () => {
       const next = mockNext();
 
       mockWorkspaceService.getById.mockResolvedValue({ id: 'ws-123' });
-      mockWorkspaceService.getUserRole.mockResolvedValue('member');
+      vi.mocked(prisma.workspace_members.findUnique).mockResolvedValue({ role: 'member', status: 'active' } as any);
 
       await optionalWorkspace()(req, res, next);
 

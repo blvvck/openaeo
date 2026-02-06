@@ -9,6 +9,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { getWorkspaceService, type WorkspaceContext } from '../services/auth/workspace';
+import { prisma } from '../prisma';
 import { type WorkspaceRole } from '@shared/schema';
 
 // ============================================================================
@@ -123,9 +124,12 @@ export function requireWorkspace() {
         return;
       }
 
-      const role = await workspaceService.getUserRole(workspaceId, userId);
+      const member = await prisma.workspace_members.findUnique({
+        where: { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } },
+        select: { role: true, status: true },
+      });
 
-      if (!role) {
+      if (!member || member.status !== 'active') {
         res.status(403).json({
           error: 'Access denied to this workspace',
           code: 'WORKSPACE_ACCESS_DENIED',
@@ -137,7 +141,7 @@ export function requireWorkspace() {
       req.workspace = {
         workspaceId,
         userId,
-        role: role as WorkspaceRole,
+        role: member.role as WorkspaceRole,
       };
 
       next();
@@ -188,10 +192,12 @@ export function optionalWorkspace() {
         return;
       }
 
-      const role = await workspaceService.getUserRole(workspaceId, userId);
+      const member = await prisma.workspace_members.findUnique({
+        where: { workspace_id_user_id: { workspace_id: workspaceId, user_id: userId } },
+        select: { role: true, status: true },
+      });
 
-      // User doesn't have access - ignore (don't fail)
-      if (!role) {
+      if (!member || member.status !== 'active') {
         next();
         return;
       }
@@ -200,7 +206,7 @@ export function optionalWorkspace() {
       req.workspace = {
         workspaceId,
         userId,
-        role: role as WorkspaceRole,
+        role: member.role as WorkspaceRole,
       };
 
       next();
