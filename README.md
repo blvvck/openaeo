@@ -115,10 +115,11 @@ Apply the committed Prisma migrations, then start the app:
 ```bash
 npm run db:generate
 npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
-Open `http://localhost:3000`. A fresh installation has no seeded users, workspaces, or customer data. Each person who signs up gets a workspace associated with their own Clerk user. For a production deployment, use your own Clerk production instance and keys; each social provider you enable requires its own provider credentials. See Clerk's guides for [Google](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/google), [GitHub](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/github), and [Microsoft](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/microsoft).
+Open `http://localhost:3000`. `npm run db:seed` populates the platform catalog used by collection; it does not create user or customer records. A fresh installation has no seeded users, workspaces, or customer data. Each person who signs up gets a workspace associated with their own Clerk user, and the app provisions a separate read-only Demo workspace with sample analytics on that user's first authenticated request, so no manual demo seeding step is needed. For a production deployment, use your own Clerk production instance and keys; each social provider you enable requires its own provider credentials. See Clerk's guides for [Google](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/google), [GitHub](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/github), and [Microsoft](https://clerk.com/docs/guides/configure/auth-strategies/social-connections/microsoft).
 
 ## Configuration
 
@@ -127,14 +128,16 @@ The full variable list is in `.env.example`. Core settings:
 | Variable | Purpose |
 | --- | --- |
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk key embedded in the web client at build time |
+| `VITE_LOGO_DEV_KEY` | Optional Logo.dev public key for company logos in the competitor wizard |
 | `CLERK_SECRET_KEY` | Server-side Clerk authentication |
 | `DATABASE_URL` | Prisma migration connection |
 | `APP_DATABASE_URL` | Restricted runtime PostgreSQL connection |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`, `GOOGLE_API_KEY`, `XAI_API_KEY`, `DEEPSEEK_API_KEY` | Optional provider API credentials |
 | `ENABLE_SCRAPING` | Set to `true` to enable browser fallback collection |
 | `SCRAPEOPS_API_KEY` | Optional proxy service for scraping retries |
+| `RESEND_API_KEY`, `ALERT_EMAIL_FROM` | Required for email alert channels; the sender must be verified in Resend |
 
-Store secrets in `.env.local` or the host's secret manager. Do not commit credentials.
+Store secrets in `.env.local` or the host's secret manager. Do not commit credentials. Slack and webhook alert channels need no email configuration. Email channels fail with a setup error when either Resend variable is missing, so a test or delivery never reports success without sending.
 
 ## Deploy on Google Cloud Run
 
@@ -162,6 +165,7 @@ Cloud Run's free usage allowance requires a Google Cloud billing account, and us
 | `npm run check` | Run TypeScript checks |
 | `npm run db:generate` | Generate Prisma Client |
 | `npm run db:migrate` | Apply committed Prisma migrations |
+| `npm run db:seed` | Populate the platform catalog |
 | `npm run db:studio` | Open Prisma Studio |
 
 ## Changes and support

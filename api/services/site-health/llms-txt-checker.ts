@@ -6,19 +6,21 @@
  */
 
 import type { LlmsTxtStatus } from '@shared/types/site-health';
+import { assertPublicDomain, fetchPublicText } from './domain-guard';
 
 /**
  * Check a domain's llms.txt file
  */
 export async function checkLlmsTxt(domain: string): Promise<LlmsTxtStatus> {
-  const url = `https://${domain}/llms.txt`;
+  const safeDomain = await assertPublicDomain(domain);
+  const url = `https://${safeDomain}/llms.txt`;
   const issues: string[] = [];
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(url, {
+    const response = await fetchPublicText(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'OpenAEO-Bot/1.0',
@@ -39,7 +41,7 @@ export async function checkLlmsTxt(domain: string): Promise<LlmsTxtStatus> {
       };
     }
 
-    const text = await response.text();
+    const text = response.text;
     const sizeBytes = new TextEncoder().encode(text).length;
 
     // Validate the content

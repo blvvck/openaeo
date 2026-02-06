@@ -7,6 +7,7 @@
 
 import type { RobotsTxtStatus, AIBotConfig } from '@shared/types/site-health';
 import { AI_BOTS } from '@shared/types/site-health';
+import { assertPublicDomain, fetchPublicText } from './domain-guard';
 
 interface RobotsRule {
   userAgent: string;
@@ -115,14 +116,15 @@ function isBotAllowed(botUserAgent: string, groups: RobotsRule[]): { allowed: bo
  * Check a domain's robots.txt file for AI bot permissions
  */
 export async function checkRobotsTxt(domain: string): Promise<RobotsTxtStatus> {
-  const url = `https://${domain}/robots.txt`;
+  const safeDomain = await assertPublicDomain(domain);
+  const url = `https://${safeDomain}/robots.txt`;
   const issues: string[] = [];
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(url, {
+    const response = await fetchPublicText(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'OpenAEO-Bot/1.0',
@@ -145,7 +147,7 @@ export async function checkRobotsTxt(domain: string): Promise<RobotsTxtStatus> {
       };
     }
 
-    const content = await response.text();
+    const content = response.text;
     const groups = parseRobotsTxt(content);
 
     // Check each AI bot

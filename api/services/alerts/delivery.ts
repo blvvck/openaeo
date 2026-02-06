@@ -195,13 +195,37 @@ export class AlertDeliveryService {
     }
   }
 
-  /**
-   * Send email alert (placeholder - needs SMTP configuration)
-   */
   private async sendEmail(channel: AlertChannel, result: RuleEvaluationResult): Promise<void> {
     const config = channel.config as unknown as EmailChannelConfig;
-    void config;
-    void result;
+    const recipients = (config.recipients ?? []).map((recipient) => recipient.trim()).filter(Boolean);
+    if (recipients.length === 0) throw new Error('Email channel has no recipients');
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.ALERT_EMAIL_FROM;
+    if (!apiKey) throw new Error('RESEND_API_KEY is not set. Configure it in .env.local or your host environment to deliver email alerts.');
+    if (!from) throw new Error('ALERT_EMAIL_FROM is not set. Set it to a verified Resend sender in .env.local or your host environment.');
+
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: recipients,
+        subject: config.subject || `OpenAEO alert: ${result.ruleName}`,
+        text: [
+          result.message,
+          `Rule: ${result.ruleName}`,
+          `Current: ${result.currentValue}, previous: ${result.previousValue}, threshold: ${result.threshold}`,
+          `Change: ${result.change} (${result.changePercent}%)`,
+        ].join('\n'),
+      }),
+    });
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    if (!response.ok) {
+      throw new Error(payload?.message || `Resend returned ${response.status}`);
+    }
   }
 
   /**

@@ -99,7 +99,9 @@ export async function getNextPromptRunAt(frequency: PromptFrequency): Promise<Da
 
 export function scheduleDuePromptRun(workspaceId: string, forceIds: number[] = []): void {
   setTimeout(() => {
-    void queueDuePromptRun(workspaceId, forceIds);
+    queueDuePromptRun(workspaceId, forceIds).catch((error) => {
+      console.error('Scheduled prompt run failed:', error);
+    });
   }, 250);
 }
 

@@ -6,6 +6,7 @@
  */
 
 import type { SitemapStatus } from '@shared/types/site-health';
+import { assertPublicDomain, fetchPublicText } from './domain-guard';
 
 /**
  * Simple XML parser for sitemap
@@ -37,6 +38,7 @@ function extractSitemapInfo(xml: string): { urls: string[]; lastmod: string | nu
  * Check a domain's sitemap.xml file
  */
 export async function checkSitemap(domain: string): Promise<SitemapStatus> {
+  const safeDomain = await assertPublicDomain(domain);
   const possiblePaths = [
     '/sitemap.xml',
     '/sitemap_index.xml',
@@ -44,16 +46,16 @@ export async function checkSitemap(domain: string): Promise<SitemapStatus> {
   ];
 
   for (const path of possiblePaths) {
-    const url = `https://${domain}${path}`;
+    const url = `https://${safeDomain}${path}`;
     const issues: string[] = [];
 
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
 
-      const response = await fetch(url, {
+      const response = await fetchPublicText(url, {
         signal: controller.signal,
-        headers: {
+          headers: {
           'User-Agent': 'OpenAEO-Bot/1.0',
           'Accept': 'application/xml, text/xml, */*',
         },
@@ -65,7 +67,7 @@ export async function checkSitemap(domain: string): Promise<SitemapStatus> {
         continue; // Try next path
       }
 
-      const content = await response.text();
+      const content = response.text;
 
       // Check if it's valid XML
       if (!content.includes('<?xml') && !content.includes('<urlset') && !content.includes('<sitemapindex')) {

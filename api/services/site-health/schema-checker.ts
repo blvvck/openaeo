@@ -7,6 +7,7 @@
 
 import type { SchemaStatus, SchemaTypeCheck, PageMetaInfo } from '@shared/types/site-health';
 import { IMPORTANT_SCHEMA_TYPES } from '@shared/types/site-health';
+import { assertPublicDomain, fetchPublicText } from './domain-guard';
 
 /**
  * Extract JSON-LD schema from HTML
@@ -124,14 +125,15 @@ const EMPTY_PAGE_META: PageMetaInfo = {
  * Check a domain's homepage for schema markup
  */
 export async function checkSchema(domain: string): Promise<SchemaStatus> {
-  const url = `https://${domain}`;
+  const safeDomain = await assertPublicDomain(domain);
+  const url = `https://${safeDomain}`;
   const issues: string[] = [];
 
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const response = await fetch(url, {
+    const response = await fetchPublicText(url, {
       signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; OpenAEO-Bot/1.0)',
@@ -154,7 +156,7 @@ export async function checkSchema(domain: string): Promise<SchemaStatus> {
       };
     }
 
-    const html = await response.text();
+    const html = response.text;
     const pageMeta = extractPageMeta(html);
     const schemas = extractJsonLd(html);
     const foundTypes = getSchemaTypes(schemas);

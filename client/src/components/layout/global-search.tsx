@@ -153,7 +153,14 @@ export function GlobalSearch() {
               <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
               {normalizedQuery ? "Searching this workspace..." : "Loading workspace shortcuts..."}
             </div>
-          ) : isError && results.length === 0 ? (
+          ) : (
+            <>
+              {data?.partial && (
+                <div role="status" className="mb-2 rounded-lg border border-figma-border bg-figma-hover px-3 py-2 text-xs text-figma-secondary">
+                  Some results are missing: {(data.errors ?? []).join(', ')}. Refine your search or try again.
+                </div>
+              )}
+              {isError && results.length === 0 ? (
             <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
               <p className="text-sm text-figma-secondary">Search could not load. Check your connection and try again.</p>
               <button type="button" onClick={() => void refetch()} className="text-sm font-medium text-figma-blue hover:underline">Try again</button>
@@ -190,6 +197,8 @@ export function GlobalSearch() {
                 );
               })}
             </div>
+          )}
+            </>
           )}
         </div>
       </DialogContent>

@@ -7,13 +7,11 @@ import { prisma } from "../prisma";
 const router = Router();
 const searchQuery = z.string().trim().max(100).optional();
 
-async function readSearchPart<T>(operation: Promise<T>, name: string): Promise<T | undefined> {
-  try {
-    return await operation;
-  } catch (error) {
-    console.error(`[Search API] Failed to read ${name}`, error);
-    return undefined;
-  }
+function settledValue<T>(result: PromiseSettledResult<T>, name: string, errors: string[]): T | undefined {
+  if (result.status === "fulfilled") return result.value;
+  console.error(`[Search API] Failed to read ${name}`, result.reason);
+  errors.push(name);
+  return undefined;
 }
 
 router.get("/", async (req, res) => {
@@ -31,8 +29,8 @@ router.get("/", async (req, res) => {
     }
 
     const query = parsed.data ?? "";
-    const [prompts, topics, competitors, sources] = await Promise.all([
-      readSearchPart(prisma.prompts.findMany({
+    const [promptsResult, topicsResult, competitorsResult, sourcesResult] = await Promise.allSettled([
+      prisma.prompts.findMany({
         where: {
           workspace_id: workspaceId,
           archived_at: null,
@@ -41,8 +39,8 @@ router.get("/", async (req, res) => {
         select: { id: true, text: true },
         take: query ? 10 : 5,
         orderBy: { created_at: "desc" },
-      }), "prompts"),
-      readSearchPart(prisma.topics.findMany({
+      }),
+      prisma.topics.findMany({
         where: {
           workspace_id: workspaceId,
           ...(query ? { name: { contains: query, mode: "insensitive" as const } } : {}),
@@ -50,8 +48,8 @@ router.get("/", async (req, res) => {
         select: { id: true, name: true },
         take: query ? 10 : 5,
         orderBy: { name: "asc" },
-      }), "topics"),
-      readSearchPart(prisma.competitors.findMany({
+      }),
+      prisma.competitors.findMany({
         where: {
           workspace_id: workspaceId,
           ...(query ? {
@@ -64,8 +62,8 @@ router.get("/", async (req, res) => {
         select: { id: true, name: true, domain: true },
         take: query ? 10 : 5,
         orderBy: { name: "asc" },
-      }), "competitors"),
-      readSearchPart(prisma.sources.findMany({
+      }),
+      prisma.sources.findMany({
         where: {
           workspace_id: workspaceId,
           ...(query ? {
@@ -79,8 +77,13 @@ router.get("/", async (req, res) => {
         select: { id: true, domain: true, title: true, url: true },
         take: query ? 10 : 5,
         orderBy: { citation_count: "desc" },
-      }), "sources"),
+      }),
     ]);
+    const errors: string[] = [];
+    const prompts = settledValue(promptsResult, "prompts", errors);
+    const topics = settledValue(topicsResult, "topics", errors);
+    const competitors = settledValue(competitorsResult, "competitors", errors);
+    const sources = settledValue(sourcesResult, "sources", errors);
 
     const results: GlobalSearchResult[] = [
       ...(prompts ?? []).map((prompt) => ({
@@ -113,7 +116,10 @@ router.get("/", async (req, res) => {
       })),
     ];
 
-    res.json({ results } satisfies GlobalSearchResponse);
+    res.json({
+      results,
+      ...(errors.length > 0 ? { partial: true, errors } : {}),
+    } satisfies GlobalSearchResponse);
   } catch (error) {
     console.error("[Search API] Failed to search workspace", error);
     res.status(500).json({ error: "Could not search this workspace" });

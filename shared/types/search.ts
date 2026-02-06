@@ -10,4 +10,6 @@ export interface GlobalSearchResult {
 
 export interface GlobalSearchResponse {
   results: GlobalSearchResult[];
+  partial?: boolean;
+  errors?: string[];
 }
