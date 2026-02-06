@@ -5,6 +5,8 @@ import express from "express";
 import request from "supertest";
 import promptsRouter from "./prompts";
 import { storage } from "../data";
+import { runInWorkspace } from "../context/workspace-context";
+import { scheduleDuePromptRun } from "../services/prompts/prompt-tracking";
 import { insertPromptSchema } from "@shared/schema";
 
 // Mock storage
@@ -43,8 +45,18 @@ vi.mock("../services/site-intelligence/site-profiler", () => ({
     }),
 }));
 
+vi.mock("../services/prompts/prompt-tracking", () => ({
+    getPromptFrequency: vi.fn().mockResolvedValue("daily"),
+    scheduleDuePromptRun: vi.fn(),
+    queueDuePromptRun: vi.fn(),
+    getNextPromptRunAt: vi.fn(),
+    updatePromptFrequency: vi.fn(),
+    PROMPT_FREQUENCIES: ["daily", "7d", "14d", "30d"],
+}));
+
 const app = express();
 app.use(express.json());
+app.use((_req, _res, next) => runInWorkspace("workspace-test", next));
 app.use("/api/prompts", promptsRouter);
 
 describe("PROMPTS Routes", () => {
@@ -62,8 +74,9 @@ describe("PROMPTS Routes", () => {
                 .send({ text: "Test Prompt", topicId: 1 });
 
             expect(res.status).toBe(201);
-            expect(res.body).toEqual(mockPrompt);
+            expect(res.body).toEqual({ ...mockPrompt, trackingQueued: true, frequency: "daily" });
             expect(storage.createPrompt).toHaveBeenCalledWith({ text: "Test Prompt", topicId: 1 });
+            expect(scheduleDuePromptRun).toHaveBeenCalledWith("workspace-test", [1]);
         });
 
         it("should return 400 for invalid input", async () => {

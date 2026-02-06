@@ -78,7 +78,7 @@ export function WelcomeModal({
         {/* Actions */}
         <div className="flex flex-col items-center gap-4 mt-2">
           <Button
-            className="w-full h-11 bg-figma-blue hover:bg-figma-blue/90 text-white font-medium text-figma-sm rounded-xl shadow-sm"
+            className="w-full h-11 bg-figma-blue hover:brightness-95 text-white font-medium text-figma-sm rounded-xl shadow-sm"
             size="lg"
             onClick={handleGetStarted}
           >

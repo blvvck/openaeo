@@ -755,22 +755,14 @@ describe("WorkspaceSwitcher", () => {
 })
 
 describe("WorkspaceAvatar", () => {
-  it("renders avatar with image when avatarUrl provided", async () => {
+  it("renders avatar with image when avatarUrl provided", () => {
     render(
       <WorkspaceAvatar
         workspace={{ name: "Acme Corp", avatarUrl: "https://example.com/logo.png" }}
       />
     )
 
-    // Radix Avatar delays image render, check for fallback initially
-    // The image src is set but may not be visible until loaded
-    await waitFor(() => {
-      const avatar = screen.getByText("AC").closest("span")
-      expect(avatar).toBeInTheDocument()
-    })
-
-    // Verify the avatar structure is correct (image will show if/when loaded)
-    // In jsdom, images don't fully load, so we just verify fallback works
+    expect(screen.getByRole("img", { name: "Acme Corp workspace" })).toHaveAttribute("src", "https://example.com/logo.png")
     expect(screen.getByText("AC")).toBeInTheDocument()
   })
 

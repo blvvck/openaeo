@@ -146,10 +146,9 @@ function useTopInsights() {
 
 interface WelcomeEmptyStateProps {
   onSetupBrand: () => void;
-  onTakeTour: () => void;
 }
 
-function WelcomeEmptyState({ onSetupBrand, onTakeTour }: WelcomeEmptyStateProps) {
+function WelcomeEmptyState({ onSetupBrand }: WelcomeEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
       <div className="mb-6 p-6 bg-primary-100 rounded-full">
@@ -167,15 +166,13 @@ function WelcomeEmptyState({ onSetupBrand, onTakeTour }: WelcomeEmptyStateProps)
           <li>Get alerts when things change</li>
         </ul>
       </div>
-      <div className="flex gap-4">
-        <Button size="lg" onClick={onSetupBrand}>
-          Set up your brand
-        </Button>
-        <Button variant="outline" size="lg" onClick={onTakeTour}>
-          Take a quick tour
-        </Button>
-      </div>
-      <p className="text-figma-sm text-figma-secondary mt-4">Takes about 3 minutes</p>
+      <Button size="lg" onClick={onSetupBrand}>
+        Set up your brand
+      </Button>
+      <p className="text-figma-sm text-figma-secondary mt-4">Setup takes about 3 minutes</p>
+      <p className="text-figma-sm text-figma-secondary mt-1">
+        Or choose Demo in the workspace switcher to explore with sample data.
+      </p>
     </div>
   );
 }
@@ -235,10 +232,6 @@ export function DashboardPage() {
     navigate('/app/settings/brand');
   };
 
-  const handleTakeTour = () => {
-    navigate('/app/dashboard');
-  };
-
   const handleCompetitorClick = () => {
     navigate('/app/competitors');
   };
@@ -268,10 +261,7 @@ export function DashboardPage() {
     if (errorMessage.includes('No brand configured') || errorMessage.includes('NO_BRAND')) {
       return (
         <main role="main" aria-label="Dashboard">
-          <WelcomeEmptyState
-            onSetupBrand={handleSetupBrand}
-            onTakeTour={handleTakeTour}
-          />
+          <WelcomeEmptyState onSetupBrand={handleSetupBrand} />
         </main>
       );
     }
